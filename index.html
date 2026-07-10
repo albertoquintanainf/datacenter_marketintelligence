@@ -230,7 +230,13 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
       <option value="AMER">Americas</option>
       <option value="APAC">APAC</option>
     </select></div>
-    <div><label>Company</label><input type="text" id="mapCompany" list="companyList" placeholder="All companies"></div>
+    <div><label>Company type</label><select id="mapCompanyType">
+      <option value="">All company types</option>
+      <option value="hyper">Hyperscalers</option>
+      <option value="neo">Neocloud / GPU cloud</option>
+      <option value="colo">Colocation providers</option>
+    </select></div>
+    <div><label>Company (name)</label><input type="text" id="mapCompany" list="companyList" placeholder="All companies"></div>
     <div><label>Facility category</label><select id="mapCat"><option value="">All</option></select></div>
     <div><label>Facility subcategory</label><select id="mapSubcat"><option value="">All</option></select></div>
     <div><label>Facility status</label><select id="mapStatus2"><option value="">All</option></select></div>
@@ -238,16 +244,16 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     <div style="align-self:end"><button class="btn" onclick="resetMapFilters()">Reset map filters</button></div>
   </div>
   <div class="kpis" id="mapKpis"></div>
-  <div class="panel"><h3>Country investment table (always available)</h3>
-    <div style="overflow:auto;max-height:420px"><table id="mapCountryTable"><thead><tr><th>Country</th><th>Region</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num">Pipeline MW</th><th class="num">Future MW</th><th class="num"># DC</th></tr></thead><tbody></tbody></table></div>
-  </div>
   <div class="panel">
     <h3 id="mapTitle">Future investment by country (MW)</h3>
-    <div style="position:relative">
+    <div style="position:relative;max-width:900px;margin:0 auto">
       <canvas id="mapCanvas" width="1000" height="500" style="display:block;background:#f0ece7;border:1px solid var(--line);border-radius:4px"></canvas>
       <div id="mapTip" style="position:absolute;pointer-events:none;display:none;background:#2b2b2b;color:#fff;padding:6px 10px;border-radius:4px;font-size:12px;font-family:var(--mono);max-width:240px;z-index:5"></div>
       <div id="mapLegend" style="display:flex;gap:2px;align-items:center;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--dim)"></div>
     </div>
+  </div>
+  <div class="panel"><h3>Country investment table</h3>
+    <div style="overflow:auto;max-height:420px"><table id="mapCountryTable"><thead><tr><th>Country</th><th>Region</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num">Pipeline MW</th><th class="num">Future MW</th><th class="num"># DC</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="stats-grid">
     <div class="panel"><h3>Top 20 countries by shown metric (MW)</h3><div class="chartbox"><canvas id="mapBar"></canvas></div></div>
@@ -298,8 +304,8 @@ uniq('subcategory').forEach(v=>els('fSubcat').append(new Option(v,v)));
 uniq('category').forEach(v=>els('mapCat').append(new Option(v,v)));
 uniq('subcategory').forEach(v=>els('mapSubcat').append(new Option(v,v)));
 uniq('status').forEach(v=>els('mapStatus2').append(new Option(v,v)));
-window.resetMapFilters=()=>{['mapCompany','mapCat','mapSubcat','mapStatus2','mapSize'].forEach(id=>{if(els(id))els(id).value='';});renderMap();};
-['mapCompany','mapCat','mapSubcat','mapStatus2','mapSize'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('input',()=>renderMap());});
+window.resetMapFilters=()=>{['mapCompany','mapCompanyType','mapCat','mapSubcat','mapStatus2','mapSize'].forEach(id=>{if(els(id))els(id).value='';});renderMap();};
+['mapCompany','mapCompanyType','mapCat','mapSubcat','mapStatus2','mapSize'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('input',()=>renderMap());});
 uniq('region').forEach(v=>els('sRegion').append(new Option(v,v)));
 uniq('market').forEach(v=>els('sMarket').append(new Option(v,v)));
 uniq('category').forEach(v=>els('sCat').append(new Option(v,v)));
@@ -1020,14 +1026,30 @@ function featurePath(geom,v){
 }
 // paleta secuencial naranja Hanwha (claro -> oscuro)
 const MAP_COLORS=['#fdece0','#fbd4b8','#f8b48a','#f4925a','#ee6f2c','#c85512','#8f3a0b'];
+// Categorías de empresa (definidas en el dashboard; no vienen en la base BNEF).
+// Uso de nombres EXACTOS tal como aparecen en la base de datos.
+const COMPANY_TYPES = {
+  hyper: new Set(['Amazon Web Services','Microsoft','Google','Meta','Oracle','Apple','Alibaba','Tencent','ByteDance','TikTok']),
+  neo: new Set(['CoreWeave','Lambda','Nebius','Crusoe','Vultr','Together AI','Paperspace','FluidStack','Genesis Digital Assets','Vast.ai','RunPod','Denvr Dataworks','Voltage Park','Genesis Cloud']),
+  colo: new Set(['Equinix','Digital Realty','Digital Realty Bersama','MC Digital Realty','Vantage Data Centers','CyrusOne','CyrusOne KEP','DATA4','NTT Global Data Centers','NTT Communications Corporation','NTT DATA','NTT Docomo','Iron Mountain','Colt DCS','Colt Technology Services','Global Switch','STACK Infrastructure','STACK Americas','Stack Telecom','Aligned','QTS Datacenters','CoreSite','EdgeConneX','Interxion','KDDI Telehouse','Telehouse Canada','Digital Edge DC','Princeton Digital Group (PDG)','Flexential','Cologix','Switch','Switch Datacenters','SUNeVision iAdvantage','Quantum Switch'])
+};
+function companyTypeOf(name){
+  if(!name) return null;
+  if(COMPANY_TYPES.hyper.has(name)) return 'hyper';
+  if(COMPANY_TYPES.neo.has(name)) return 'neo';
+  if(COMPANY_TYPES.colo.has(name)) return 'colo';
+  return null;
+}
 function mapScoped(){ // filas tras filtros del buscador + filtros propios del mapa
   const co=(els('mapCompany')?els('mapCompany').value.trim().toLowerCase():'');
+  const ct=(els('mapCompanyType')?els('mapCompanyType').value:'');
   const ca=(els('mapCat')?els('mapCat').value:'');
   const sc=(els('mapSubcat')?els('mapSubcat').value:'');
   const st=(els('mapStatus2')?els('mapStatus2').value:'');
   const sz=(els('mapSize')?els('mapSize').value:'');
   return filtered.filter(r=>{
     if(co && !(r[C.company]||'').toLowerCase().includes(co)) return false;
+    if(ct && companyTypeOf(r[C.company])!==ct) return false;
     if(ca && r[C.category]!==ca) return false;
     if(sc && r[C.subcategory]!==sc) return false;
     if(st && r[C.status]!==st) return false;
@@ -1130,9 +1152,12 @@ function renderMap(){
     var host = cv.parentElement;
     var cssW = (host && host.clientWidth) ? host.clientWidth : (cv.clientWidth || 1000);
     if(!cssW || cssW<50) cssW = 1000;
+    // proporción real de la vista activa (evita estiramiento)
+    var vAspect = (v.lon1-v.lon0)/(v.lat1-v.lat0);   // ancho/alto en grados
+    var bufW = 1000, bufH = Math.round(bufW/vAspect);
+    cv.width = bufW; cv.height = bufH;               // buffer interno con proporción correcta
     cv.style.width = cssW + 'px';
-    cv.style.height = Math.round(cssW/2) + 'px';
-    cv.width = 1000; cv.height = 500;
+    cv.style.height = Math.round(cssW/vAspect) + 'px';  // CSS mantiene la misma proporción
     var ctx=cv.getContext('2d');
     if(!ctx){ throw new Error('no 2d context'); }
     var W=cv.width, H=cv.height;
@@ -1168,6 +1193,26 @@ function renderMap(){
       }
       nPaths++;
       if(o) hit.push({iso:f.id,o:o,minx:minx,miny:miny,maxx:maxx,maxy:maxy});
+    }
+    // etiquetas de valor sobre los países (los que quepan por tamaño)
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    for(var hi=0; hi<hit.length; hi++){
+      var hh=hit[hi]; var val=hh.o[metric];
+      if(!val || val<=0) continue;
+      var bw=hh.maxx-hh.minx, bh=hh.maxy-hh.miny;
+      var label = val>=1000 ? (val/1000).toFixed(1)+'k' : Math.round(val).toString();
+      var fontPx = Math.max(8, Math.min(13, Math.floor(bh/3)));
+      ctx.font = fontPx+'px system-ui, sans-serif';
+      var tw = ctx.measureText(label).width;
+      // solo si la etiqueta cabe dentro del bounding box del país
+      if(tw < bw*0.9 && fontPx*1.2 < bh*0.8){
+        var cx=(hh.minx+hh.maxx)/2, cy=(hh.miny+hh.maxy)/2;
+        // color de texto según lo oscuro del relleno
+        var darkFill = colorFor(val,breaks);
+        var isDark = ['#c85512','#8f3a0b','#ee6f2c'].indexOf(darkFill)>=0;
+        ctx.fillStyle = isDark ? '#fff' : '#5a2d08';
+        ctx.fillText(label, cx, cy);
+      }
     }
     window._mapHit=hit;
 
