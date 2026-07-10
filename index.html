@@ -81,6 +81,7 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .fw-row .v .na{color:#9aa7b6;font-style:italic}
 .chartbox{position:relative;height:300px}
 .chartbox.tall{height:380px}
+.chartbox.xtall{height:520px}
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:900px){.stats-grid{grid-template-columns:1fr}.fw-row{grid-template-columns:1fr}}
 footer{margin-top:30px;padding:20px 28px;border-top:1px solid var(--line);font-size:11.5px;color:var(--dim);line-height:1.6;background:#fff}
@@ -125,8 +126,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     <div><label>Continent / Region</label><select id="fRegion"><option value="">All</option></select></div>
     <div><label>Country / Market</label><select id="fMarket"><option value="">All</option></select></div>
     <div><label>Size (headline MW)</label><select id="fSize"><option value="">All</option><option value="a">&lt; 5 MW</option><option value="b">5 – 20 MW</option><option value="c">20 – 50 MW</option><option value="d">50 – 100 MW</option><option value="e">≥ 100 MW</option></select></div>
-    <div><label>Category</label><select id="fCat"><option value="">All</option></select></div>
-    <div><label>Subcategory</label><select id="fSubcat"><option value="">All</option></select></div>
+    <div><label>Facility type</label><select id="fSubcat"><option value="">All types</option></select></div>
     <div><label>Status</label><select id="fStatus"><option value="">All</option></select></div>
     <div><label>Search by DC name</label><input type="text" id="fName" placeholder="e.g. LD4, MAD…"></div>
   </div>
@@ -153,20 +153,19 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
     <div><label>Region (local)</label><select id="sRegion"><option value="">All</option></select></div>
     <div><label>Country (local)</label><select id="sMarket"><option value="">All</option></select></div>
-    <div><label>Category (local)</label><select id="sCat"><option value="">All</option></select></div>
-    <div><label>Subcategory (local)</label><select id="sSubcat"><option value="">All</option></select></div>
+    <div><label>Facility type (local)</label><select id="sSubcat"><option value="">All types</option></select></div>
     <div style="align-self:end"><button class="btn" onclick="resetStatFilters()">Reset local filters</button></div>
   </div>
   <div class="kpis" id="statKpis"></div>
   <div class="stats-grid">
-    <div class="panel"><h3>Top 15 countries by live capacity (MW)</h3><div class="chartbox"><canvas id="chCountry"></canvas></div></div>
-    <div class="panel"><h3>Top 15 companies by live capacity (MW)</h3><div class="chartbox"><canvas id="chCompany"></canvas></div></div>
+    <div class="panel"><h3>Top 15 countries by live capacity (MW)</h3><div class="chartbox tall"><canvas id="chCountry"></canvas></div></div>
+    <div class="panel"><h3>Top 15 companies by live capacity (MW)</h3><div class="chartbox tall"><canvas id="chCompany"></canvas></div></div>
     <div class="panel"><h3>Capacity by region · live vs construction vs pipeline</h3><div class="chartbox"><canvas id="chRegion"></canvas></div></div>
     <div class="panel"><h3>Distribution by facility size (number of DCs)</h3><div class="chartbox"><canvas id="chSize"></canvas></div></div>
     <div class="panel"><h3>Land vs headline capacity (each point = 1 DC, land reported)</h3><div class="chartbox"><canvas id="chLand"></canvas></div></div>
     <div class="panel"><h3>Facility subcategory — top 10 by live MW</h3><div class="chartbox"><canvas id="chSeg"></canvas></div></div>
     <div class="panel"><h3>Facility status (number of DCs)</h3><div class="chartbox"><canvas id="chStatus"></canvas></div></div>
-    <div class="panel"><h3>Facility category · live vs constr. vs pipeline (MW)</h3><div class="chartbox"><canvas id="chCat"></canvas></div></div>
+    <div class="panel"><h3>Facility type · live vs constr. vs pipeline (MW)</h3><div class="chartbox tall"><canvas id="chCat"></canvas></div></div>
   </div>
   <div class="panel" style="margin-top:14px"><h3>Facility type glossary — how BNEF classifies data centers</h3>
     <div style="font-size:13px;line-height:1.6">
@@ -218,10 +217,10 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   <p class="note">Choropleth by country, shaded by the chosen metric. Combines the search-tab filters (01) with the map filters below (company, facility type, status, size). Any variable — live, construction, pipeline, future — can be mapped. Hover a country for its breakdown; click to drill into the search tab. Colour scale is per-quantile so smaller markets stay legible despite the US dominating absolute totals.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
     <div><label>Metric shown</label><select id="mapMetric">
+      <option value="live" selected>Live capacity (operational)</option>
       <option value="fut">Future = under construction + pipeline</option>
       <option value="uc">Under construction only</option>
       <option value="pipe">Other pipeline only</option>
-      <option value="live">Live capacity (for reference)</option>
     </select></div>
     <div><label>View</label><select id="mapView">
       <option value="world">World</option>
@@ -237,8 +236,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
       <option value="colo">Colocation providers</option>
     </select></div>
     <div><label>Company (name)</label><input type="text" id="mapCompany" list="companyList" placeholder="All companies"></div>
-    <div><label>Facility category</label><select id="mapCat"><option value="">All</option></select></div>
-    <div><label>Facility subcategory</label><select id="mapSubcat"><option value="">All</option></select></div>
+    <div><label>Facility type</label><select id="mapSubcat"><option value="">All types</option></select></div>
     <div><label>Facility status</label><select id="mapStatus2"><option value="">All</option></select></div>
     <div><label>Size (headline MW)</label><select id="mapSize"><option value="">All</option><option value="a">&lt; 5 MW</option><option value="b">5 – 20 MW</option><option value="c">20 – 50 MW</option><option value="d">50 – 100 MW</option><option value="e">≥ 100 MW</option></select></div>
     <div style="align-self:end"><button class="btn" onclick="resetMapFilters()">Reset map filters</button></div>
@@ -256,7 +254,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     <div style="overflow:auto;max-height:420px"><table id="mapCountryTable"><thead><tr><th>Country</th><th>Region</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num">Pipeline MW</th><th class="num">Future MW</th><th class="num"># DC</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="stats-grid">
-    <div class="panel"><h3>Top 20 countries by shown metric (MW)</h3><div class="chartbox"><canvas id="mapBar"></canvas></div></div>
+    <div class="panel"><h3>Top 15 countries by shown metric (MW)</h3><div class="chartbox xtall"><canvas id="mapBar"></canvas></div></div>
     <div class="panel"><h3>Regional split of shown metric (MW)</h3>
       <div style="overflow-x:auto"><table id="mapRegTable"><thead><tr><th>Region</th><th class="num">Countries</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num">Pipeline MW</th><th class="num">Future MW</th></tr></thead><tbody></tbody></table></div>
     </div>
@@ -283,6 +281,7 @@ window.addEventListener('error',e=>{
 const DATA = window.__DATA;
 const WORLD = window.__WORLD;
 const MAPX = window.__MAPX;
+const LABELS = window.__LABELS || {};
 const C = {}; DATA.cols.forEach((c,i)=>C[c]=i);
 const R = DATA.rows;
 document.getElementById('metaBadge').textContent = DATA.meta.dataset+' · '+DATA.meta.date+' · '+DATA.meta.n+' data centers';
@@ -299,29 +298,48 @@ const els = id=>document.getElementById(id);
 function uniq(col){ const s=new Set(); R.forEach(r=>{const v=r[C[col]]; if(v)s.add(v);}); return [...s].sort(); }
 uniq('region').forEach(v=>els('fRegion').append(new Option(v,v)));
 uniq('market').forEach(v=>els('fMarket').append(new Option(v,v)));
-uniq('category').forEach(v=>els('fCat').append(new Option(v,v)));
-uniq('subcategory').forEach(v=>els('fSubcat').append(new Option(v,v)));
-uniq('category').forEach(v=>els('mapCat').append(new Option(v,v)));
-uniq('subcategory').forEach(v=>els('mapSubcat').append(new Option(v,v)));
+// Rellena un <select> con subcategorías agrupadas bajo su categoría (Colocation / Self-build).
+// La subcategoría implica la categoría, así que un solo menú jerárquico basta.
+function fillSubcatGrouped(selId){
+  const sel = els(selId); if(!sel) return;
+  // recopilar category -> set(subcategory) desde los datos
+  const groups = {};
+  R.forEach(r=>{
+    const cat = r[C.category], sub = r[C.subcategory];
+    if(!cat || !sub) return;
+    (groups[cat] = groups[cat] || new Set()).add(sub);
+  });
+  // orden de categorías y de subcategorías
+  const catOrder = ['Colocation','Self-build'];
+  const cats = Object.keys(groups).sort((a,b)=>{
+    const ia=catOrder.indexOf(a), ib=catOrder.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib) || a.localeCompare(b);
+  });
+  cats.forEach(cat=>{
+    const og = document.createElement('optgroup'); og.label = cat;
+    [...groups[cat]].sort().forEach(sub=>{ og.appendChild(new Option(sub, sub)); });
+    sel.appendChild(og);
+  });
+}
+fillSubcatGrouped('fSubcat');
+fillSubcatGrouped('mapSubcat');
 uniq('status').forEach(v=>els('mapStatus2').append(new Option(v,v)));
-window.resetMapFilters=()=>{['mapCompany','mapCompanyType','mapCat','mapSubcat','mapStatus2','mapSize'].forEach(id=>{if(els(id))els(id).value='';});renderMap();};
-['mapCompany','mapCompanyType','mapCat','mapSubcat','mapStatus2','mapSize'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('input',()=>renderMap());});
+window.resetMapFilters=()=>{['mapCompany','mapCompanyType','mapSubcat','mapStatus2','mapSize'].forEach(id=>{if(els(id))els(id).value='';});renderMap();};
+['mapCompany','mapCompanyType','mapSubcat','mapStatus2','mapSize'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('input',()=>renderMap());});
 uniq('region').forEach(v=>els('sRegion').append(new Option(v,v)));
 uniq('market').forEach(v=>els('sMarket').append(new Option(v,v)));
-uniq('category').forEach(v=>els('sCat').append(new Option(v,v)));
-uniq('subcategory').forEach(v=>els('sSubcat').append(new Option(v,v)));
+fillSubcatGrouped('sSubcat');
 function statScoped(){
-  const sr=els('sRegion').value, sm=els('sMarket').value, sca=els('sCat').value, ssc=els('sSubcat').value;
+  const sr=els('sRegion').value, sm=els('sMarket').value, ssc=els('sSubcat').value;
   return filtered.filter(r=>{
     if(sr && r[C.region]!==sr) return false;
     if(sm && r[C.market]!==sm) return false;
-    if(sca && r[C.category]!==sca) return false;
     if(ssc && r[C.subcategory]!==ssc) return false;
     return true;
   });
 }
-window.resetStatFilters=()=>{['sRegion','sMarket','sCat','sSubcat'].forEach(id=>els(id).value='');renderStats();};
-['sRegion','sMarket','sCat','sSubcat'].forEach(id=>document.getElementById(id).addEventListener('change',()=>renderStats()));
+window.resetStatFilters=()=>{['sRegion','sMarket','sSubcat'].forEach(id=>els(id).value='');renderStats();};
+['sRegion','sMarket','sSubcat'].forEach(id=>document.getElementById(id).addEventListener('change',()=>renderStats()));
 uniq('status').forEach(v=>els('fStatus').append(new Option(v,v)));
 uniq('company').forEach(v=>els('companyList').append(new Option(v)));
 
@@ -330,14 +348,13 @@ const PAGE=25;
 
 function applyFilters(){
   const co=els('fCompany').value.trim().toLowerCase(), re=els('fRegion').value, ma=els('fMarket').value,
-        si=els('fSize').value, ca=els('fCat').value, sc=els('fSubcat').value, st=els('fStatus').value, na=els('fName').value.trim().toLowerCase();
+        si=els('fSize').value, sc=els('fSubcat').value, st=els('fStatus').value, na=els('fName').value.trim().toLowerCase();
   filtered = R.filter(r=>{
     if(co && !(r[C.company]||'').toLowerCase().includes(co)) return false;
     if(re && r[C.region]!==re) return false;
     if(ma && r[C.market]!==ma) return false;
     if(si && sizeBucket(r[C.headline])!==si) return false;
-    if(ca && r[C.category]!==ca) return false;
-    if(sc && r[C.subcategory]!==sc) return false;
+        if(sc && r[C.subcategory]!==sc) return false;
     if(st && r[C.status]!==st) return false;
     if(na && !(r[C.name]||'').toLowerCase().includes(na)) return false;
     return true;
@@ -348,7 +365,7 @@ function applyFilters(){
   if(els('tab-ramp').style.display!=='none') renderRamp();
   if(els('tab-map') && els('tab-map').style.display!=='none') renderMap();
 }
-['fCompany','fRegion','fMarket','fSize','fCat','fSubcat','fStatus','fName'].forEach(id=>els(id).addEventListener('input',applyFilters));
+['fCompany','fRegion','fMarket','fSize','fSubcat','fStatus','fName'].forEach(id=>els(id).addEventListener('input',applyFilters));
 
 function sortData(){
   const k=C[sortCol];
@@ -871,11 +888,22 @@ function bar(id,labels,data,color,horizontal=true,extra={}){
   if(charts[id])charts[id].destroy();
   const build=()=>{
     if(charts[id]){try{charts[id].destroy();}catch(_){}}
+    // eje de categorías: forzar TODAS las etiquetas (sin auto-salto)
+    const catAxis = { ticks:{ autoSkip:false, maxRotation:horizontal?0:90, minRotation:0, font:{size:11} } };
+    const baseScales = horizontal ? { y:catAxis } : { x:catAxis };
+    // fusionar con extra.scales si viene (para no perder stacked, etc.)
+    const mergedExtra = Object.assign({}, extra);
+    mergedExtra.scales = Object.assign({}, baseScales, extra.scales || {});
+    if(extra.scales){
+      // fusionar por eje para conservar ticks + stacked
+      if(horizontal){ mergedExtra.scales.y = Object.assign({}, catAxis, extra.scales.y||{}, {ticks:Object.assign({}, catAxis.ticks, (extra.scales.y&&extra.scales.y.ticks)||{})}); }
+      else { mergedExtra.scales.x = Object.assign({}, catAxis, extra.scales.x||{}, {ticks:Object.assign({}, catAxis.ticks, (extra.scales.x&&extra.scales.x.ticks)||{})}); }
+    }
     charts[id]=new Chart(cv,{type:'bar',
       data:{labels,datasets:dsets},
       options:Object.assign({indexAxis:horizontal?'y':'x',maintainAspectRatio:false,animation:{duration:250},
         layout:{padding:horizontal?{right:52}:{top:16}},
-        plugins:{legend:{display:!single}}},extra),
+        plugins:{legend:{display:!single}}},mergedExtra),
       plugins:[valueLabels]});
   };
   try{
@@ -925,12 +953,15 @@ function renderStats(){
   const stm={}; f.forEach(r=>{const k=r[C.status]; if(k)stm[k]=(stm[k]||0)+1;});
   const ste=Object.entries(stm).sort((a,b)=>b[1]-a[1]);
   bar('chStatus',ste.map(x=>x[0]),ste.map(x=>x[1]),'#8a8178',false);
-  const cats=[...new Set(f.map(r=>r[C.category]).filter(Boolean))].sort();
+  // por SUBcategoría (más informativa que las 2 categorías), top 10 por live+futuro, barras horizontales
+  const subTot={};
+  f.forEach(r=>{const s=r[C.subcategory]; if(!s)return; if(!subTot[s])subTot[s]={live:0,uc:0,pipe:0}; subTot[s].live+=r[C.live]||0; subTot[s].uc+=r[C.uc]||0; subTot[s].pipe+=r[C.pipeline]||0;});
+  const cats=Object.keys(subTot).sort((a,b)=>(subTot[b].live+subTot[b].uc+subTot[b].pipe)-(subTot[a].live+subTot[a].uc+subTot[a].pipe)).slice(0,12);
   bar('chCat',cats,[
-    {label:'Live',data:cats.map(c=>Math.round(sum(f.filter(r=>r[C.category]===c),'live'))),backgroundColor:TEAL},
-    {label:'Under construction',data:cats.map(c=>Math.round(sum(f.filter(r=>r[C.category]===c),'uc'))),backgroundColor:NAVY},
-    {label:'Other pipeline',data:cats.map(c=>Math.round(sum(f.filter(r=>r[C.category]===c),'pipeline'))),backgroundColor:'#c9beb4'}
-  ],null,false,{scales:{x:{stacked:true},y:{stacked:true}}});
+    {label:'Live',data:cats.map(c=>Math.round(subTot[c].live)),backgroundColor:TEAL},
+    {label:'Under construction',data:cats.map(c=>Math.round(subTot[c].uc)),backgroundColor:NAVY},
+    {label:'Other pipeline',data:cats.map(c=>Math.round(subTot[c].pipe)),backgroundColor:'#c9beb4'}
+  ],null,true,{scales:{x:{stacked:true},y:{stacked:true}}});
   const cross={};
   f.forEach(r=>{const k=(r[C.market]||'—')+'||'+(r[C.company]||'—');
     cross[k]=cross[k]||{n:0,live:0,uc:0,pipe:0,land:0};
@@ -1043,14 +1074,12 @@ function companyTypeOf(name){
 function mapScoped(){ // filas tras filtros del buscador + filtros propios del mapa
   const co=(els('mapCompany')?els('mapCompany').value.trim().toLowerCase():'');
   const ct=(els('mapCompanyType')?els('mapCompanyType').value:'');
-  const ca=(els('mapCat')?els('mapCat').value:'');
   const sc=(els('mapSubcat')?els('mapSubcat').value:'');
   const st=(els('mapStatus2')?els('mapStatus2').value:'');
   const sz=(els('mapSize')?els('mapSize').value:'');
   return filtered.filter(r=>{
     if(co && !(r[C.company]||'').toLowerCase().includes(co)) return false;
     if(ct && companyTypeOf(r[C.company])!==ct) return false;
-    if(ca && r[C.category]!==ca) return false;
     if(sc && r[C.subcategory]!==sc) return false;
     if(st && r[C.status]!==st) return false;
     if(sz && sizeBucket(r[C.headline])!==sz) return false;
@@ -1077,7 +1106,7 @@ function colorFor(v,breaks){
   let i=0; while(i<breaks.length && v>=breaks[i]) i++;
   return MAP_COLORS[Math.min(i,MAP_COLORS.length-1)];
 }
-let mapState={metric:'fut',view:'world'};
+let mapState={metric:'live',view:'world'};
 function renderMap(){
   var v, agg, metric, breaks;
   function inView(iso){
@@ -1124,7 +1153,7 @@ function renderMap(){
     // barra top-20
     try{
       var topArr=[]; for(var i3 in agg){ if(inView(i3)) topArr.push(agg[i3]); }
-      topArr.sort(function(a,b){return b[metric]-a[metric];}); topArr=topArr.slice(0,20);
+      topArr.sort(function(a,b){return b[metric]-a[metric];}); topArr=topArr.slice(0,15);
       bar('mapBar',topArr.map(function(o){return o.market;}),topArr.map(function(o){return Math.round(o[metric]);}),'#ee6f2c');
     }catch(_){}
 
@@ -1194,20 +1223,23 @@ function renderMap(){
       nPaths++;
       if(o) hit.push({iso:f.id,o:o,minx:minx,miny:miny,maxx:maxx,maxy:maxy});
     }
-    // etiquetas de valor sobre los países (los que quepan por tamaño)
+    // etiquetas de valor sobre los países (posición = punto interior real del país)
     ctx.textAlign='center'; ctx.textBaseline='middle';
     for(var hi=0; hi<hit.length; hi++){
       var hh=hit[hi]; var val=hh.o[metric];
       if(!val || val<=0) continue;
       var bw=hh.maxx-hh.minx, bh=hh.maxy-hh.miny;
       var label = val>=1000 ? (val/1000).toFixed(1)+'k' : Math.round(val).toString();
-      var fontPx = Math.max(8, Math.min(13, Math.floor(bh/3)));
+      var fontPx = Math.max(8, Math.min(13, Math.floor(bh/3.2)));
       ctx.font = fontPx+'px system-ui, sans-serif';
       var tw = ctx.measureText(label).width;
-      // solo si la etiqueta cabe dentro del bounding box del país
-      if(tw < bw*0.9 && fontPx*1.2 < bh*0.8){
-        var cx=(hh.minx+hh.maxx)/2, cy=(hh.miny+hh.maxy)/2;
-        // color de texto según lo oscuro del relleno
+      // posición: punto interior precalculado (LABELS), proyectado; si no, centro del bbox
+      var cx, cy;
+      var lp = (typeof LABELS!=='undefined' && LABELS[hh.iso]) ? LABELS[hh.iso] : null;
+      if(lp){ cx = px(lp[0]); cy = py(lp[1]); }
+      else { cx=(hh.minx+hh.maxx)/2; cy=(hh.miny+hh.maxy)/2; }
+      // dibujar solo si el punto está dentro del área visible y la etiqueta cabe
+      if(cx>=0 && cx<=W && cy>=0 && cy<=H && tw < bw*0.95 && fontPx*1.1 < bh*0.85){
         var darkFill = colorFor(val,breaks);
         var isDark = ['#c85512','#8f3a0b','#ee6f2c'].indexOf(darkFill)>=0;
         ctx.fillStyle = isDark ? '#fff' : '#5a2d08';
@@ -1242,5 +1274,5 @@ document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()
 
 renderTable(); renderSearchKpis();
 </script>
-<script>if(typeof window.__DATA==='undefined'){document.addEventListener('DOMContentLoaded',function(){document.body.innerHTML='<div style="font-family:sans-serif;padding:40px"><h2>No se cargaron los datos</h2><p>Falta <b>data.js</b> en la misma carpeta que index.html.</p></div>';});}</script></body>
+<script>if(typeof window.__DATA==='undefined'){document.addEventListener('DOMContentLoaded',function(){document.body.innerHTML='<div style="font-family:sans-serif;padding:40px"><h2>No se cargaron los datos</h2><p>Falta <b>data.js</b>.</p></div>';});}</script></body>
 </html>
