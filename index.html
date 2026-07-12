@@ -116,6 +116,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   <button data-tab="stats">02 · Statistics</button>
   <button data-tab="ramp">03 · Ramp-ups</button>
   <button data-tab="map">04 · Investment map</button>
+  <button data-tab="ann">05 · Announcements</button>
 </nav>
 <main>
 
@@ -221,6 +222,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
       <option value="fut">Future = under construction + pipeline</option>
       <option value="uc">Under construction only</option>
       <option value="pipe">Other pipeline only</option>
+      <option value="ann">Announced MW (prospective layer, beta)</option>
     </select></div>
     <div><label>View</label><select id="mapView">
       <option value="world">World</option>
@@ -261,6 +263,33 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   </div>
 </section>
 
+
+<!-- ================= TAB 5: ANNOUNCEMENTS ================= -->
+<section id="tab-ann" style="display:none">
+  <p class="note"><b>Prospective layer — announced investments.</b> Manually curated from verifiable sources (press releases, specialised media). This is <b>NOT</b> BNEF-verified capacity: figures are company announcements, some with multi-year horizons, and may never fully materialise. Capex normalised to US$bn (EUR→USD ≈1.16). Phases: land → grid request → permitting → announced → construction → contracted. «Platform» = multi-project investment vehicles (MW not attributable to a single country). Keep both layers separate when quoting figures.</p>
+  <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
+    <div><label>Scope</label><select id="annScope"><option value="">World</option><option value="eu">Europe only</option></select></div>
+    <div><label>Phase</label><select id="annPhase"><option value="">All phases</option></select></div>
+    <div><label>Confidence</label><select id="annConf"><option value="">All</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+    <div><label>Sort ranking by</label><select id="annSort"><option value="capex">Capex (US$bn)</option><option value="mw">Announced MW</option><option value="date">Most recent</option></select></div>
+  </div>
+  <div class="kpis" id="annKpis"></div>
+  <div class="panel"><h3 id="annTitle">Announced investments — world ranking</h3>
+    <div style="overflow-x:auto"><table id="annTable"><thead><tr><th>#</th><th>Project</th><th>Company / promoters</th><th>Country</th><th class="num">MW (announced)</th><th class="num">Capex (US$bn)</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="stats-grid">
+    <div class="panel"><h3>Announced capacity by country (MW, where disclosed)</h3>
+      <div style="overflow-x:auto"><table id="annCountry"><thead><tr><th>Country</th><th class="num"># announcements</th><th class="num">MW announced</th><th class="num">Capex US$bn</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="panel"><h3>How to feed this layer</h3>
+      <div style="font-size:13px;line-height:1.7">
+      <p>Each row lives in <b>anuncios.js</b> (same folder as index.html). To add an announcement, copy an existing entry and fill in: project, company, country + ISO3 code, MW (if disclosed), capex in US$bn, phase, confidence, date, source and URL. <b>Rule: no source, no entry.</b></p>
+      <p style="margin-top:8px;color:var(--dim)">Suggested hard-signal sources to monitor: grid connection requests (Red Eléctrica, RTE, TenneT, National Grid), environmental permitting, land registry moves; then press releases and specialised media (DataCenterDynamics, Data Center Knowledge). Update quarterly alongside the BNEF refresh, or ad hoc when major announcements land.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <!-- FICHA MODAL -->
@@ -271,6 +300,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 </footer>
 
 <script src="data.js"></script>
+<script src="anuncios.js" onerror="console.warn('anuncios.js not found — announcements layer disabled')"></script>
 <script>
 window.addEventListener('error',e=>{
   const ms=document.getElementById('mapStatus');
@@ -1029,6 +1059,71 @@ function renderClusters(){
 }
 
 
+
+/* ---------- announcements layer (prospective, manually curated) ---------- */
+const ANN = (window.__ANN && window.__ANN.items) ? window.__ANN.items : [];
+function annScoped(){
+  const sc=els('annScope')?els('annScope').value:'';
+  const ph=els('annPhase')?els('annPhase').value:'';
+  const cf=els('annConf')?els('annConf').value:'';
+  return ANN.filter(a=>{
+    if(sc==='eu' && !a.europe) return false;
+    if(ph && a.phase!==ph) return false;
+    if(cf && a.confidence!==cf) return false;
+    return true;
+  });
+}
+function renderAnn(){
+ try{
+  if(!ANN.length){
+    els('annKpis').innerHTML='<div style="padding:14px;color:var(--dim)">No announcements file loaded (anuncios.js missing or empty). The dashboard works normally without it.</div>';
+    return;
+  }
+  const items=annScoped();
+  const sort=els('annSort')?els('annSort').value:'capex';
+  const sorted=items.slice().sort((a,b)=>{
+    if(sort==='mw') return (b.mw||0)-(a.mw||0);
+    if(sort==='date') return String(b.date).localeCompare(String(a.date));
+    return (b.capex_usd_bn||0)-(a.capex_usd_bn||0);
+  });
+  // KPIs
+  const totCapex=items.reduce((s,a)=>s+(a.capex_usd_bn||0),0);
+  const totMW=items.reduce((s,a)=>s+((a.phase!=='platform'&&a.mw)||0),0);
+  const eu=items.filter(a=>a.europe);
+  const euCapex=eu.reduce((s,a)=>s+(a.capex_usd_bn||0),0);
+  els('annKpis').innerHTML=kpiHTML([
+    [items.length,'Announcements tracked'],
+    ['$'+fmt(totCapex,0)+' bn','Disclosed capex (where known)'],
+    [fmt(totMW,0)+' MW','Announced MW (excl. platforms)'],
+    [eu.length,'European announcements'],
+    ['$'+fmt(euCapex,0)+' bn','European capex disclosed']
+  ]);
+  els('annTitle').textContent='Announced investments — '+(els('annScope')&&els('annScope').value==='eu'?'Europe':'world')+' ranking · sorted by '+(sort==='mw'?'announced MW':sort==='date'?'date':'capex');
+  // ranking
+  const confBadge=c=>'<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:9px;background:'+(c==='high'?'#e7f2e7':c==='medium'?'#fdf3e0':'#fdeaea')+';color:'+(c==='high'?'#1e6b34':c==='medium'?'#9a6b00':'#a33')+'">'+c.toUpperCase()+'</span>';
+  els('annTable').querySelector('tbody').innerHTML=sorted.map((a,i)=>
+    '<tr><td>'+(i+1)+'</td><td><b>'+a.project+'</b>'+(a.notes?'<div style="font-size:11px;color:var(--dim);max-width:340px">'+a.notes+'</div>':'')+'</td>'+
+    '<td>'+a.company+'</td><td>'+a.country+'</td>'+
+    '<td class="num">'+(a.mw?fmt(a.mw,0):'—')+'</td>'+
+    '<td class="num">'+(a.capex_usd_bn?('$'+fmt(a.capex_usd_bn,1)):'—')+'</td>'+
+    '<td>'+a.phase+'</td><td>'+confBadge(a.confidence)+'</td><td>'+a.date+'</td>'+
+    '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td></tr>').join('');
+  // por país (excluye platforms sin país)
+  const byC={};
+  items.forEach(a=>{ if(a.phase==='platform'||!a.iso3) return;
+    byC[a.country]=byC[a.country]||{n:0,mw:0,capex:0};
+    byC[a.country].n++; byC[a.country].mw+=a.mw||0; byC[a.country].capex+=a.capex_usd_bn||0; });
+  els('annCountry').querySelector('tbody').innerHTML=Object.entries(byC).sort((x,y)=>y[1].capex-x[1].capex).map(([c,o])=>
+    '<tr><td>'+c+'</td><td class="num">'+o.n+'</td><td class="num">'+(o.mw?fmt(o.mw,0):'—')+'</td><td class="num">'+(o.capex?('$'+fmt(o.capex,1)):'—')+'</td></tr>').join('');
+ }catch(e){ console.error('renderAnn failed:',e); const k=els('annKpis'); if(k)k.innerHTML='<div style="color:#c0392b;padding:10px">Announcements error: '+(e&&e.message||e)+'</div>'; }
+}
+// poblar filtro de fases y listeners
+(function(){
+  const ph=els('annPhase');
+  if(ph && ANN.length){ [...new Set(ANN.map(a=>a.phase))].sort().forEach(p=>ph.append(new Option(p,p))); }
+  ['annScope','annPhase','annConf','annSort'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('change',()=>renderAnn());});
+})();
+
 /* ---------- investment map (self-contained, no map library) ---------- */
 const MAP_VIEWS = {
   world:{lon0:-170,lon1:190,lat0:-58,lat1:82},
@@ -1089,10 +1184,17 @@ function mapScoped(){ // filas tras filtros del buscador + filtros propios del m
 function mapAgg(){
   const m={};
   mapScoped().forEach(r=>{ const iso=MAPX.match[r[C.market]]; if(!iso)return;
-    m[iso]=m[iso]||{market:r[C.market],region:r[C.region],n:0,live:0,uc:0,pipe:0};
+    m[iso]=m[iso]||{market:r[C.market],region:r[C.region],n:0,live:0,uc:0,pipe:0,ann:0};
     const o=m[iso]; o.n++; o.live+=r[C.live]||0; o.uc+=r[C.uc]||0; o.pipe+=r[C.pipeline]||0;
   });
-  Object.values(m).forEach(o=>{o.fut=o.uc+o.pipe;});
+  Object.values(m).forEach(o=>{o.fut=o.uc+o.pipe; o.ann=o.ann||0;});
+  // capa de anuncios (prospectiva): MW anunciados por país, excluyendo plataformas
+  if(typeof ANN!=='undefined' && ANN.length){
+    ANN.forEach(a=>{ if(!a.iso3 || a.phase==='platform' || !a.mw) return;
+      if(!m[a.iso3]) m[a.iso3]={market:a.country,region:a.region,n:0,live:0,uc:0,pipe:0,fut:0,ann:0};
+      m[a.iso3].ann += a.mw;
+    });
+  }
   return m;
 }
 function quantileBreaks(vals,k){
@@ -1132,7 +1234,7 @@ function renderMap(){
       [fmt(tot('live'),0)+' MW','Live (reference)'],
       [nC,'Countries with capacity']
     ]);
-    var mlabel={fut:'future (UC + pipeline)',uc:'under construction',pipe:'other pipeline',live:'live'}[metric];
+    var mlabel={fut:'future (UC + pipeline)',uc:'under construction',pipe:'other pipeline',live:'live',ann:'ANNOUNCED (prospective, unverified)'}[metric];
     els('mapTitle').textContent='Country '+mlabel+' capacity (MW) — '+mapState.view+' view';
     // tabla de países (siempre visible, independiente del canvas)
     try{
@@ -1251,7 +1353,7 @@ function renderMap(){
     // interacción
     var tip=els('mapTip'), canvas=cv;
     function findAt(mx,my){ var best=null,bestArea=Infinity,arr=window._mapHit||[]; for(var i=0;i<arr.length;i++){ var h=arr[i]; if(mx>=h.minx&&mx<=h.maxx&&my>=h.miny&&my<=h.maxy){ var a=(h.maxx-h.minx)*(h.maxy-h.miny); if(a<bestArea){bestArea=a;best=h;} } } return best; }
-    canvas.onmousemove=function(e){ var rect=canvas.getBoundingClientRect(); var mx=(e.clientX-rect.left)/rect.width*canvas.width, my=(e.clientY-rect.top)/rect.height*canvas.height; var h=findAt(mx,my); if(!h){ if(tip)tip.style.display='none'; canvas.style.cursor='default'; return; } canvas.style.cursor='pointer'; if(tip){ tip.style.display='block'; tip.style.left=(e.clientX-rect.left+12)+'px'; tip.style.top=(e.clientY-rect.top+12)+'px'; tip.innerHTML='<b>'+h.o.market+'</b> · '+h.o.region+'<br>Future '+fmt(h.o.fut,0)+' MW (UC '+fmt(h.o.uc,0)+' + pipe '+fmt(h.o.pipe,0)+')<br>Live '+fmt(h.o.live,0)+' MW · '+h.o.n+' DC'; } };
+    canvas.onmousemove=function(e){ var rect=canvas.getBoundingClientRect(); var mx=(e.clientX-rect.left)/rect.width*canvas.width, my=(e.clientY-rect.top)/rect.height*canvas.height; var h=findAt(mx,my); if(!h){ if(tip)tip.style.display='none'; canvas.style.cursor='default'; return; } canvas.style.cursor='pointer'; if(tip){ tip.style.display='block'; tip.style.left=(e.clientX-rect.left+12)+'px'; tip.style.top=(e.clientY-rect.top+12)+'px'; tip.innerHTML='<b>'+h.o.market+'</b> · '+h.o.region+'<br>Future '+fmt(h.o.fut,0)+' MW (UC '+fmt(h.o.uc,0)+' + pipe '+fmt(h.o.pipe,0)+')<br>Live '+fmt(h.o.live,0)+' MW · '+h.o.n+' DC'+(h.o.ann?('<br><span style="color:#f8b48a">Announced (prospective): '+fmt(h.o.ann,0)+' MW</span>'):''); } };
     canvas.onmouseleave=function(){ if(tip)tip.style.display='none'; };
     canvas.onclick=function(e){ var rect=canvas.getBoundingClientRect(); var mx=(e.clientX-rect.left)/rect.width*canvas.width, my=(e.clientY-rect.top)/rect.height*canvas.height; var h=findAt(mx,my); if(h){ els('fMarket').value=h.o.market; applyFilters(); document.querySelector('nav button[data-tab="search"]').click(); } };
   }catch(e){
@@ -1266,10 +1368,11 @@ els('mapView').addEventListener('change',e=>{mapState.view=e.target.value;render
 /* ---------- tabs: redibujar gráficas al activar (fix canvas oculto = tamaño 0) ---------- */
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav button').forEach(o=>o.classList.remove('on')); b.classList.add('on');
-  ['search','stats','ramp','map'].forEach(t=>{ var el=els('tab-'+t); if(el) el.style.display = t===b.dataset.tab?'':'none'; });
+  ['search','stats','ramp','map','ann'].forEach(t=>{ var el=els('tab-'+t); if(el) el.style.display = t===b.dataset.tab?'':'none'; });
   if(b.dataset.tab==='stats') requestAnimationFrame(()=>requestAnimationFrame(()=>renderStats()));
   if(b.dataset.tab==='ramp') requestAnimationFrame(()=>renderRamp());
   if(b.dataset.tab==='map') requestAnimationFrame(()=>requestAnimationFrame(()=>renderMap()));
+  if(b.dataset.tab==='ann') requestAnimationFrame(()=>renderAnn());
 }));
 
 renderTable(); renderSearchKpis();
