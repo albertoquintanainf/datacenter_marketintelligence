@@ -161,6 +161,12 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-tab .kpis{ page-break-inside: avoid; }
 }
 </style>
+
+  <!-- Config opcional para modo colaborativo (Supabase). Si no existe, el dashboard sigue funcionando en modo estático. -->
+  <script src="config.js" onerror="/* modo estático */"></script>
+  <!-- SDK de Supabase (UMD) desde CDN. Solo se activa si config.js define las claves. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+  <script src="collab.js"></script>
 </head>
 <body>
 <header>
@@ -203,6 +209,18 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     </table>
     </div>
     <div class="pag"><button id="pgPrev">‹ Previous</button><span id="pgInfo"></span><button id="pgNext">Next ›</button></div>
+  </div>
+
+  <div class="panel" id="searchAnnPanel" style="margin-top:14px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <h3 style="margin:0;flex:1">
+        <span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span>
+        Prospective announcements matching current filters
+      </h3>
+      <label style="font-size:12px;color:var(--dim)"><input type="checkbox" id="searchAnnShow" checked> Include announcements</label>
+    </div>
+    <div style="overflow-x:auto"><table id="searchAnnTable"><thead><tr><th>Project</th><th>Company</th><th>Country</th><th class="num">MW</th><th class="num">Capex US$bn</th><th>Phase</th><th>Confidence</th><th>Source</th></tr></thead><tbody></tbody></table></div>
+    <p style="color:var(--dim);font-size:11px;margin:6px 0 0">These are announced/planned projects, NOT part of BNEF-verified capacity. Never sum with the live/pipeline totals above.</p>
   </div>
 </section>
 
@@ -249,6 +267,12 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   </div>
   <div class="panel" style="margin-top:14px"><h3>Country × company — top 20 combinations by live MW</h3>
     <div style="overflow-x:auto"><table id="crossTable"><thead><tr><th>Country</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Constr. MW</th><th class="num">Pipeline MW</th><th class="num">Land (ha)</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div class="panel" id="statsAnnPanel" style="margin-top:14px">
+    <h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> Prospective layer — summary (kept separate from BNEF above)</h3>
+    <div class="kpis" id="statsAnnKpis"></div>
+    <p style="color:var(--dim);font-size:11px;margin:6px 0 0">Full ranking and per-country breakdown in tab 05. Never summed with the BNEF verified metrics.</p>
   </div>
 </section>
 
@@ -337,16 +361,19 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   </div>
   <div class="kpis" id="annKpis"></div>
   <div class="panel"><h3 id="annTitle">Announced investments — world ranking</h3>
-    <div style="overflow-x:auto"><table id="annTable"><thead><tr><th>#</th><th>Project</th><th>Company / promoters</th><th>Country</th><th class="num">MW (announced)</th><th class="num">Capex (US$bn)</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="annTable"><thead><tr><th>#</th><th>Project</th><th>Company / promoters</th><th>Country</th><th class="num">MW (announced)</th><th class="num">Capex (US$bn)</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th><th>Added by</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="stats-grid">
     <div class="panel"><h3>Announced capacity by country (MW, where disclosed)</h3>
       <div style="overflow-x:auto"><table id="annCountry"><thead><tr><th>Country</th><th class="num"># announcements</th><th class="num">MW announced</th><th class="num">Capex US$bn</th></tr></thead><tbody></tbody></table></div>
     </div>
-    <div class="panel"><h3>How to feed this layer</h3>
+    <div class="panel"><h3>Add / manage announcements</h3>
       <div style="font-size:13px;line-height:1.7">
-      <p>Each row lives in <b>anuncios.js</b> (same folder as index.html). To add an announcement, copy an existing entry and fill in: project, company, country + ISO3 code, MW (if disclosed), capex in US$bn, phase, confidence, date, source and URL. <b>Rule: no source, no entry.</b></p>
-      <p style="margin-top:8px;color:var(--dim)">Suggested hard-signal sources to monitor: grid connection requests (Red Eléctrica, RTE, TenneT, National Grid), environmental permitting, land registry moves; then press releases and specialised media (DataCenterDynamics, Data Center Knowledge). Update quarterly alongside the BNEF refresh, or ad hoc when major announcements land.</p>
+      <p id="annCollabStatus" style="color:var(--dim)">Sign in with the shared password to add or edit announcements.</p>
+      <div style="margin:10px 0">
+        <button class="btn primary" id="annAddBtn" disabled onclick="openAnnEditor()">+ Add announcement</button>
+      </div>
+      <p style="color:var(--dim);font-size:12px">Suggested sources: grid connection requests (Red Eléctrica, RTE, TenneT, National Grid), environmental permitting, DataCenterDynamics, Data Center Knowledge. <b>Rule: no source, no entry.</b></p>
       </div>
     </div>
   </div>
@@ -479,9 +506,9 @@ function applyFilters(){
     if(na && !(r[C.name]||'').toLowerCase().includes(na)) return false;
     return true;
   });
-  page=0; renderTable(); renderSearchKpis();
+  page=0; renderTable(); renderSearchKpis(); renderSearchAnn();
   // solo redibujar la pestaña visible; las demás se redibujan al activarse
-  if(els('tab-stats').style.display!=='none') renderStats();
+  if(els('tab-stats').style.display!=='none'){ renderStats(); renderStatsAnn(); }
   if(els('tab-ramp').style.display!=='none') renderRamp();
   if(els('tab-map') && els('tab-map').style.display!=='none') renderMap();
 }
@@ -530,6 +557,53 @@ els('pgNext').onclick=()=>{page++;renderTable();};
 
 function kpiHTML(items){ return items.map(([v,l])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join(''); }
 function sum(arr,col){ let s=0; arr.forEach(r=>{const v=r[C[col]]; if(v)s+=v;}); return s; }
+
+
+function renderSearchAnn(){
+  const tbody = document.querySelector('#searchAnnTable tbody');
+  if(!tbody) return;
+  const show = document.getElementById('searchAnnShow');
+  const panel = document.getElementById('searchAnnPanel');
+  if(show && !show.checked){ tbody.innerHTML=''; return; }
+  const co=(els('fCompany')?.value||'').trim().toLowerCase();
+  const re=els('fRegion')?.value||'';
+  const ma=els('fMarket')?.value||'';
+  const na=(els('fName')?.value||'').trim().toLowerCase();
+  const list = (typeof ANN!=='undefined'?ANN:[]).filter(a=>{
+    if(co && !(a.company||'').toLowerCase().includes(co)) return false;
+    if(re && a.region!==re) return false;
+    if(ma && (a.country||'')!==ma) return false;
+    if(na && !(a.project||'').toLowerCase().includes(na) && !(a.company||'').toLowerCase().includes(na)) return false;
+    return true;
+  }).sort((a,b)=>(b.capex_usd_bn||0)-(a.capex_usd_bn||0));
+  tbody.innerHTML = list.slice(0,50).map(a=>
+    '<tr><td><b>'+escapeHTML(a.project)+'</b></td>'+
+    '<td>'+escapeHTML(a.company)+'</td>'+
+    '<td>'+escapeHTML(a.country)+'</td>'+
+    '<td class="num">'+(a.mw?fmt(a.mw,0):'—')+'</td>'+
+    '<td class="num">'+(a.capex_usd_bn?('$'+fmt(a.capex_usd_bn,1)):'—')+'</td>'+
+    '<td>'+a.phase+'</td>'+
+    '<td>'+a.confidence+'</td>'+
+    '<td><a href="'+escapeAttr(a.url)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+escapeHTML(a.source)+'</a></td></tr>'
+  ).join('') || '<tr><td colspan="8" style="color:var(--dim);text-align:center;padding:14px">No announcements match the current filters.</td></tr>';
+  if(panel){
+    const h = panel.querySelector('h3');
+    if(h){
+      // actualizar el conteo en el título
+      const c = list.length;
+      const existing = h.querySelector('.ann-count');
+      const html = ' <span class="ann-count" style="color:var(--dim);font-weight:normal;font-size:12px">('+c+' matching)</span>';
+      if(existing) existing.outerHTML = html; else h.insertAdjacentHTML('beforeend', html);
+    }
+  }
+}
+function escapeHTML(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s){ return escapeHTML(s); }
+// listener del checkbox
+document.addEventListener('DOMContentLoaded',()=>{
+  const cb=document.getElementById('searchAnnShow');
+  if(cb) cb.addEventListener('change', renderSearchAnn);
+});
 
 function renderSearchKpis(){
   els('searchKpis').innerHTML = kpiHTML([
@@ -1037,6 +1111,22 @@ function bar(id,labels,data,color,horizontal=true,extra={}){
 function groupSum(arr,keyCol,valCol){
   const m={}; arr.forEach(r=>{const k=r[C[keyCol]]; if(!k)return; m[k]=(m[k]||0)+(r[C[valCol]]||0);}); return m;
 }
+
+function renderStatsAnn(){
+  const host = document.getElementById('statsAnnKpis'); if(!host) return;
+  const items = (typeof ANN!=='undefined'?ANN:[]);
+  const totCapex = items.reduce((s,a)=>s+(a.capex_usd_bn||0),0);
+  const totMW = items.reduce((s,a)=>s+((a.phase!=='platform'&&a.mw)||0),0);
+  const eu = items.filter(a=>a.europe);
+  host.innerHTML = kpiHTML([
+    [items.length,'Announcements tracked'],
+    ['$'+fmt(totCapex,0)+' bn','Disclosed capex'],
+    [fmt(totMW,0)+' MW','Announced MW (excl. platforms)'],
+    [eu.length,'European announcements'],
+    ['$'+fmt(eu.reduce((s,a)=>s+(a.capex_usd_bn||0),0),0)+' bn','European capex disclosed']
+  ]);
+}
+
 function renderStats(){
  try{
   const f=statScoped();
@@ -1151,7 +1241,33 @@ function renderClusters(){
 
 
 /* ---------- announcements layer (prospective, manually curated) ---------- */
-const ANN = (window.__ANN && window.__ANN.items) ? window.__ANN.items : [];
+// ANN: lista de anuncios en memoria. Se puebla desde Supabase si está disponible,
+// o desde window.__ANN (estático) como fallback.
+let ANN = (window.__ANN && window.__ANN.items) ? window.__ANN.items.slice() : [];
+// Normalizar entradas Supabase (campo ann_date -> date) a la forma que ya usa el dashboard
+function normalizeAnn(a){
+  return {
+    id: a.id, project: a.project, company: a.company, country: a.country,
+    iso3: a.iso3, region: a.region, europe: !!a.europe,
+    mw: a.mw, capex_usd_bn: a.capex_usd_bn,
+    phase: a.phase, confidence: a.confidence,
+    date: a.ann_date || a.date, source: a.source, url: a.url, notes: a.notes,
+    _created_by: a.created_by, _updated_by: a.updated_by, _updated_at: a.updated_at
+  };
+}
+async function refreshAnnFromCollab(){
+  if(window.Collab && window.Collab.isAuthorized()){
+    const rows = await window.Collab.listAnnouncements();
+    ANN = rows.map(normalizeAnn);
+  } else if(window.__ANN && window.__ANN.items){
+    ANN = window.__ANN.items.slice();
+  }
+  // reflejar cambios en las pestañas que usan ANN
+  if(document.getElementById('tab-ann') && document.getElementById('tab-ann').style.display!=='none') renderAnn();
+  if(document.getElementById('tab-map') && document.getElementById('tab-map').style.display!=='none' && typeof renderMap==='function') renderMap();
+  if(document.getElementById('tab-search') && document.getElementById('tab-search').style.display!=='none' && typeof applyFilters==='function') applyFilters();
+  if(document.getElementById('tab-stats') && document.getElementById('tab-stats').style.display!=='none' && typeof renderStats==='function') renderStats();
+}
 function annScoped(){
   const sc=els('annScope')?els('annScope').value:'';
   const ph=els('annPhase')?els('annPhase').value:'';
@@ -1197,7 +1313,7 @@ function renderAnn(){
     '<td class="num">'+(a.mw?fmt(a.mw,0):'—')+'</td>'+
     '<td class="num">'+(a.capex_usd_bn?('$'+fmt(a.capex_usd_bn,1)):'—')+'</td>'+
     '<td>'+a.phase+'</td><td>'+confBadge(a.confidence)+'</td><td>'+a.date+'</td>'+
-    '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td></tr>').join('');
+    '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td>'+'<td style="font-size:11px;color:'+(a._created_by==='seed@import'?'var(--dim)':'#333')+'">'+(a._created_by==='seed@import'?'—':(a._updated_by&&a._updated_by!==a._created_by?(a._created_by+' · edited by '+a._updated_by):a._created_by))+'</td>'+(window.Collab&&window.Collab.isAuthorized()&&a.id&&a._created_by!=='seed@import'?('<td><button class="btn" style="font-size:11px;padding:2px 6px" onclick="openAnnEditor(\''+a.id+'\')">Edit</button> <button class="btn" style="font-size:11px;padding:2px 6px" onclick="deleteAnn(\''+a.id+'\')">Del</button></td>'):(window.Collab&&window.Collab.isAuthorized()?'<td style="color:var(--dim);font-size:11px">seed</td>':'<td></td>'))+'</tr>').join('');
   // por país (excluye platforms sin país)
   const byC={};
   items.forEach(a=>{ if(a.phase==='platform'||!a.iso3) return;
@@ -1212,6 +1328,114 @@ function renderAnn(){
   const ph=els('annPhase');
   if(ph && ANN.length){ [...new Set(ANN.map(a=>a.phase))].sort().forEach(p=>ph.append(new Option(p,p))); }
   ['annScope','annPhase','annConf','annSort'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('change',()=>renderAnn());});
+
+/* ---------- Modal editor de anuncios ---------- */
+function openAnnEditor(id){
+  const isEdit = !!id;
+  const a = isEdit ? ANN.find(x=>x.id===id) : {phase:'announced',confidence:'medium',europe:false,region:'EMEA'};
+  if(isEdit && !a){ alert('Announcement not found'); return; }
+  const modal = document.createElement('div');
+  modal.className='modal';
+  modal.style.display='flex';
+  modal.innerHTML = `
+    <div class="sheet" style="max-width:640px;padding:22px 26px;background:#fff;border-radius:6px">
+      <button class="close" onclick="this.closest('.modal').remove()" style="float:right;background:none;border:none;font-size:22px;cursor:pointer">×</button>
+      <h3 style="margin:0 0 14px">${isEdit?'Edit':'Add'} announcement</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;font-size:13px">
+        <label style="grid-column:1/-1">Project *<input id="_ann_project" value="${(a.project||'').replace(/"/g,'&quot;')}" required></label>
+        <label style="grid-column:1/-1">Company / promoters *<input id="_ann_company" value="${(a.company||'').replace(/"/g,'&quot;')}" required></label>
+        <label>Country *<input id="_ann_country" value="${(a.country||'').replace(/"/g,'&quot;')}" required></label>
+        <label>ISO3 (3 letters)<input id="_ann_iso3" maxlength="3" value="${a.iso3||''}"></label>
+        <label>Region<select id="_ann_region"><option value="EMEA"${a.region==='EMEA'?' selected':''}>EMEA</option><option value="AMER"${a.region==='AMER'?' selected':''}>AMER</option><option value="APAC"${a.region==='APAC'?' selected':''}>APAC</option></select></label>
+        <label>Europe<select id="_ann_europe"><option value="false"${!a.europe?' selected':''}>No</option><option value="true"${a.europe?' selected':''}>Yes</option></select></label>
+        <label>MW announced<input id="_ann_mw" type="number" step="1" value="${a.mw??''}"></label>
+        <label>Capex US$bn<input id="_ann_capex" type="number" step="0.1" value="${a.capex_usd_bn??''}"></label>
+        <label>Phase *<select id="_ann_phase">${['land','grid','permitting','announced','construction','contracted','platform'].map(p=>`<option value="${p}"${a.phase===p?' selected':''}>${p}</option>`).join('')}</select></label>
+        <label>Confidence *<select id="_ann_confidence">${['high','medium','low'].map(c=>`<option value="${c}"${a.confidence===c?' selected':''}>${c}</option>`).join('')}</select></label>
+        <label style="grid-column:1/-1">Date (YYYY-MM)<input id="_ann_date" placeholder="2026-07" value="${a.date||''}"></label>
+        <label style="grid-column:1/-1">Source *<input id="_ann_source" value="${(a.source||'').replace(/"/g,'&quot;')}" required></label>
+        <label style="grid-column:1/-1">URL * (must start with http/https)<input id="_ann_url" type="url" value="${(a.url||'').replace(/"/g,'&quot;')}" required></label>
+        <label style="grid-column:1/-1">Notes<textarea id="_ann_notes" rows="3" style="width:100%;font-family:inherit">${(a.notes||'').replace(/</g,'&lt;')}</textarea></label>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="this.closest('.modal').remove()">Cancel</button>
+        <button class="btn primary" id="_ann_save">${isEdit?'Save changes':'Create'}</button>
+      </div>
+      <div id="_ann_err" style="color:#c0392b;margin-top:8px;font-size:12px"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('_ann_save').onclick = async () => {
+    const g = k => document.getElementById('_ann_'+k).value.trim();
+    const errBox = document.getElementById('_ann_err'); errBox.textContent='';
+    const payload = {
+      project: g('project'), company: g('company'), country: g('country'),
+      iso3: g('iso3') ? g('iso3').toUpperCase() : null,
+      region: g('region'),
+      europe: g('europe')==='true',
+      mw: g('mw') ? Number(g('mw')) : null,
+      capex_usd_bn: g('capex') ? Number(g('capex')) : null,
+      phase: g('phase'), confidence: g('confidence'),
+      ann_date: g('date') || null,
+      source: g('source'), url: g('url'), notes: g('notes') || null
+    };
+    // validaciones mínimas
+    if(!payload.project || !payload.company || !payload.country || !payload.source || !payload.url){
+      errBox.textContent = 'Fill in project, company, country, source and URL.'; return;
+    }
+    if(!/^https?:\/\//.test(payload.url)){
+      errBox.textContent = 'URL must start with http:// or https://'; return;
+    }
+    if(payload.iso3 && payload.iso3.length!==3){
+      errBox.textContent = 'ISO3 code must be exactly 3 letters or empty.'; return;
+    }
+    try {
+      if(isEdit) await window.Collab.updateAnnouncement(id, payload);
+      else       await window.Collab.insertAnnouncement(payload);
+      modal.remove();
+      await refreshAnnFromCollab();
+    } catch(e){ errBox.textContent = 'Save error: ' + (e.message || e); }
+  };
+}
+
+async function deleteAnn(id){
+  const a = ANN.find(x=>x.id===id); if(!a) return;
+  if(!confirm('Delete announcement:\n\n' + a.project + '?\n\nThis is logged in the audit trail.')) return;
+  try { await window.Collab.deleteAnnouncement(id); await refreshAnnFromCollab(); }
+  catch(e){ alert('Delete error: ' + (e.message || e)); }
+}
+
+window.openAnnEditor = openAnnEditor;
+window.deleteAnn = deleteAnn;
+
+/* ---------- Inicialización de la capa colaborativa ---------- */
+(async function initCollab(){
+  if(window.Collab){
+    await window.Collab.init();
+    // Habilitar UI de edición cuando el usuario esté autorizado
+    function syncCollabUI(){
+      const auth = window.Collab.isAuthorized();
+      const btn = document.getElementById('annAddBtn');
+      const status = document.getElementById('annCollabStatus');
+      if(btn) btn.disabled = !auth;
+      if(status){
+        if(!window.Collab.ready()) status.textContent = 'Static mode: Supabase is not configured (config.js missing). Editing disabled.';
+        else if(!window.Collab.user()) status.textContent = 'Enter the shared password above to add or edit announcements.';
+        else if(!auth) status.textContent = 'Not signed in. Enter the shared password to enable editing.';
+        else status.textContent = 'Editing enabled — signed in as ' + window.Collab.user().name + '.';
+      }
+      renderAnn();
+    }
+    // Refrescar al inicializar y ante cambios de sesión
+    await refreshAnnFromCollab();
+    syncCollabUI();
+    // suscripción realtime
+    window.Collab.onAnnouncementsChange(async () => { await refreshAnnFromCollab(); });
+    // reobservar cambios de sesión
+    const orig = window.Collab._renderUI.bind(window.Collab);
+    window.Collab._renderUI = function(){ orig(); syncCollabUI(); };
+  }
+})();
+
 })();
 
 /* ---------- investment map (self-contained, no map library) ---------- */
@@ -1459,7 +1683,7 @@ els('mapView').addEventListener('change',e=>{mapState.view=e.target.value;render
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav button').forEach(o=>o.classList.remove('on')); b.classList.add('on');
   ['search','stats','ramp','map','ann'].forEach(t=>{ var el=els('tab-'+t); if(el) el.style.display = t===b.dataset.tab?'':'none'; });
-  if(b.dataset.tab==='stats') requestAnimationFrame(()=>requestAnimationFrame(()=>renderStats()));
+  if(b.dataset.tab==='stats') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderStats(); renderStatsAnn();}));
   if(b.dataset.tab==='ramp') requestAnimationFrame(()=>renderRamp());
   if(b.dataset.tab==='map') requestAnimationFrame(()=>requestAnimationFrame(()=>renderMap()));
   if(b.dataset.tab==='ann') requestAnimationFrame(()=>renderAnn());
