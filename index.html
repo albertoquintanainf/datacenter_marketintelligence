@@ -152,8 +152,12 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   }
   body.print-ficha .fTab[data-ftab="stats"],
   body.print-ficha .fTab[data-ftab="anuncios"]{ break-before:page; page-break-before:always; }
-  body.print-ficha .fTab .panel, body.print-ficha .fw-cat{ break-inside:avoid; }
-  body.print-ficha .fTab table, body.print-ficha .fTab .chartbox{ break-inside:avoid; }
+  /* Solo unidades PEQUEÑAS evitan cortarse; los paneles/tablas grandes SÍ pueden
+     fluir entre páginas (si se les fuerza a no cortarse, saltan enteros de página
+     y dejan la anterior casi en blanco). */
+  body.print-ficha .fw-cat, body.print-ficha .fw-row,
+  body.print-ficha .chartbox, body.print-ficha tr{ break-inside:avoid; page-break-inside:avoid; }
+  body.print-ficha .fTab .panel{ break-inside:auto; }
   body.print-ficha #printHeader{
     display:flex !important; position:static !important; visibility:visible !important;
     top:auto; left:auto; right:auto; margin-bottom:6mm;
@@ -254,13 +258,20 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     height: auto !important;
     max-height: 105mm !important;
   }
+  /* El mapa de anuncios de la ficha conserva su proporción (no cap de altura),
+     si no se achata al recortar la altura. */
+  body.print-ficha #coAnnMap{
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+  }
   /* Mapa en vertical: usa todo el ancho, altura moderada (es apaisado por naturaleza) */
   body.print-tab #mapCanvas{
     max-height: 100mm !important;
   }
-  /* Cada panel y cada tabla intentan mantenerse enteros en su página */
-  body.print-tab .panel, body.print-tab table,
-  body.print-ficha .panel, body.print-ficha table{ page-break-inside: avoid; break-inside: avoid; }
+  /* Paneles/tablas: en dashboard (print-tab) intentan mantenerse enteros;
+     en la ficha (print-ficha) NO se fuerzan (evita hojas casi en blanco). */
+  body.print-tab .panel, body.print-tab table{ page-break-inside: avoid; break-inside: avoid; }
   body.print-tab .stats-grid, body.print-ficha .stats-grid{ display:grid !important; grid-template-columns:1fr; gap:6mm; }
   body.print-tab .stats-grid > *, body.print-ficha .stats-grid > *{ margin-bottom: 8mm; }
   /* Ajustes tipográficos para papel */
@@ -337,12 +348,12 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 <!-- ================= TAB 2: STATS ================= -->
 <section id="tab-stats" style="display:none">
   <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
-  <p class="note">Statistics combine the search-tab filters (01) with the local filters below. «Live» capacity = operational IT capacity; lower than total contracted power.</p>
+  <p class="note">Statistics have their <b>own independent filters</b> below — they are <b>not</b> linked to the DC Database tab (02). «Live» capacity = operational IT capacity; lower than total contracted power.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
-    <div><label>Region (local)</label><select id="sRegion"><option value="">All</option></select></div>
-    <div><label>Country (local)</label><select id="sMarket"><option value="">All</option></select></div>
-    <div><label>Facility type (local)</label><select id="sSubcat"><option value="">All types</option></select></div>
-    <div style="align-self:end"><button class="btn" onclick="resetStatFilters()">Reset local filters</button></div>
+    <div><label>Region</label><select id="sRegion"><option value="">All</option></select></div>
+    <div><label>Country</label><select id="sMarket"><option value="">All</option></select></div>
+    <div><label>Facility type</label><select id="sSubcat"><option value="">All types</option></select></div>
+    <div style="align-self:end"><button class="btn" onclick="resetStatFilters()">Reset filters</button></div>
   </div>
   <div class="kpis" id="statKpis"></div>
   <div class="panel" id="statsAnnPanel" style="margin-top:14px">
@@ -446,7 +457,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 <!-- ================= TAB 4: MAP ================= -->
 <section id="tab-map" style="display:none">
   <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
-  <p class="note">Choropleth by country, shaded by the chosen metric. Combines the search-tab filters (01) with the map filters below (company, facility type, status, size). Any variable — live, construction, pipeline, future — can be mapped. Hover a country for its breakdown; click to drill into the search tab. Colour scale is per-quantile so smaller markets stay legible despite the US dominating absolute totals.</p>
+  <p class="note">Choropleth by country, shaded by the chosen metric. Uses its <b>own independent filters</b> below (company, facility type, status, size) — <b>not</b> linked to the DC Database tab (02). Any variable — live, construction, pipeline, future — can be mapped. Hover a country for its breakdown; click to drill into the search tab. Colour scale is per-quantile so smaller markets stay legible despite the US dominating absolute totals.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
     <div><label>Metric shown</label><select id="mapMetric">
       <option value="live" selected>Live capacity (operational)</option>
@@ -503,21 +514,21 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     <span id="annCollabStatus" style="color:var(--dim);font-size:12px">Sign in with the shared password to add or edit announcements.</span>
     <button class="btn" onclick="printCurrentTab()" style="margin-left:auto">🖨 Print this tab / save as PDF</button>
   </div>
-  <p class="note"><b>Prospective layer — announced investments.</b> Manually curated from verifiable sources (press releases, specialised media). This is <b>NOT</b> BNEF-verified capacity: figures are company announcements, some with multi-year horizons, and may never fully materialise. Capex is entered and stored directly in €bn (euros). Figures are company announcements (some multi-year) that may never fully materialise; verify each against its original source. Phases: land → grid request → permitting → announced → construction → contracted. «Platform» = multi-project investment vehicles (MW not attributable to a single country). Keep both layers separate when quoting figures.</p>
+  <p class="note"><b>Prospective layer — announced investments.</b> Manually curated from verifiable sources (press releases, specialised media). This is <b>NOT</b> BNEF-verified capacity: figures are company announcements, some with multi-year horizons, and may never fully materialise. Capex is entered and shown in M€ (millions of euros). Figures are company announcements (some multi-year) that may never fully materialise; verify each against its original source. Phases: land → grid request → permitting → announced → construction → contracted. «Platform» = multi-project investment vehicles (MW not attributable to a single country). Keep both layers separate when quoting figures.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
     <div><label>Scope</label><select id="annScope"><option value="">World</option><option value="eu">Europe only</option></select></div>
     <div><label>Phase</label><select id="annPhase"><option value="">All phases</option></select></div>
     <div><label>Confidence</label><select id="annConf"><option value="">All</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
-    <div><label>Sort ranking by</label><select id="annSort"><option value="capex">Capex (€bn)</option><option value="mw">Announced MW</option><option value="date">Most recent</option></select></div>
+    <div><label>Sort ranking by</label><select id="annSort"><option value="capex">Capex (M€)</option><option value="mw">Announced MW</option><option value="date">Most recent</option></select></div>
   </div>
   <div class="kpis" id="annKpis"></div>
   <div class="panel"><h3 id="annTitle">Announced investments — world ranking</h3>
-    <div style="overflow-x:auto"><table id="annTable"><thead><tr><th>#</th><th>Project</th><th>Company / promoters</th><th>Country</th><th class="num">MW (announced)</th><th class="num">Capex (€bn)</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th><th>Added by</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="annTable"><thead><tr><th>#</th><th>Project</th><th>Company / promoters</th><th>Country</th><th class="num">MW (announced)</th><th class="num">Capex (M€)</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th><th>Added by</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
     <div id="annPager" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--dim)"></div>
   </div>
   <div class="stats-grid">
     <div class="panel"><h3>Announced capacity by country (MW, where disclosed)</h3>
-      <div style="overflow-x:auto"><table id="annCountry"><thead><tr><th>Country</th><th class="num"># announcements</th><th class="num">MW announced</th><th class="num">Capex €bn</th></tr></thead><tbody></tbody></table></div>
+      <div style="overflow-x:auto"><table id="annCountry"><thead><tr><th>Country</th><th class="num"># announcements</th><th class="num">MW announced</th><th class="num">Capex M€</th></tr></thead><tbody></tbody></table></div>
     </div>
     <div class="panel"><h3>Sources &amp; rules</h3>
       <div style="font-size:13px;line-height:1.7">
@@ -532,13 +543,14 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <p class="note"><b>Company profiles directory.</b> Every operator in the BNEF database. Profiles <b>touched by the team</b> (dashboard announcements added/edited by a user) are listed <b>first</b>, most recently touched at the top; the rest follow ordered by live capacity. Click any row to open its full profile.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
-    <div><label>Search company</label><input id="coSearch" placeholder="e.g. Microsoft, Equinix…"></div>
+    <div><label>Search company</label><input type="text" id="coSearch" placeholder="e.g. Microsoft, Equinix…"></div>
     <div><label>Region</label><select id="coRegion"><option value="">All regions</option></select></div>
+    <div><label>Type</label><select id="coType"><option value="">All types</option><option value="hyper">Hyperscaler</option><option value="neo">Neocloud</option><option value="colo">Colocation</option><option value="other">Other / unclassified</option></select></div>
     <div><label>Sort</label><select id="coSort"><option value="modified">Team-edited first</option><option value="live">Live MW</option><option value="name">Name (A–Z)</option><option value="dc"># data centers</option></select></div>
   </div>
   <div class="kpis" id="coKpis"></div>
   <div class="panel"><h3 id="coProfTitle">Company profiles</h3>
-    <div style="overflow-x:auto"><table id="coProfTable"><thead><tr><th>#</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr.</th><th class="num">BNEF Pipeline</th><th>Top countries</th><th>Team activity</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="coProfTable"><thead><tr><th>#</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr.</th><th class="num">BNEF Pipeline</th><th>Type</th><th>Team activity</th></tr></thead><tbody></tbody></table></div>
     <div id="coProfPager" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--dim)"></div>
   </div>
 </section>
@@ -735,7 +747,8 @@ uniq('market').forEach(v=>els('sMarket').append(new Option(v,v)));
 fillSubcatGrouped('sSubcat');
 function statScoped(){
   const sr=els('sRegion').value, sm=els('sMarket').value, ssc=els('sSubcat').value;
-  return filtered.filter(r=>{
+  // Filtros independientes de la pestaña Statistics (NO ligados a la base de datos / tab 02)
+  return R.filter(r=>{
     if(sr && r[C.region]!==sr) return false;
     if(sm && r[C.market]!==sm) return false;
     if(ssc && r[C.subcategory]!==ssc) return false;
@@ -838,7 +851,7 @@ function renderSearchAnn(){
     '<td>'+escapeHTML(a.company)+'</td>'+
     '<td>'+escapeHTML(a.country)+'</td>'+
     '<td class="num">'+(a.mw?fmt(a.mw,0):'—')+'</td>'+
-    '<td class="num">'+(a.capex_usd_bn?('€'+fmt(a.capex_usd_bn,1)):'—')+'</td>'+
+    '<td class="num">'+(a.capex_usd_bn?(fmt(mEur(a.capex_usd_bn),0)+' M€'):'—')+'</td>'+
     '<td>'+a.phase+'</td>'+
     '<td>'+capFirst(a.confidence)+'</td>'+
     '<td><a href="'+escapeAttr(a.url)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+escapeHTML(a.source)+'</a></td></tr>'
@@ -857,6 +870,7 @@ function renderSearchAnn(){
 function escapeHTML(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s){ return escapeHTML(s); }
 function capFirst(s){ s=String(s==null?'':s); return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
+function mEur(bn){ return (Number(bn)||0)*1000; }   // capex almacenado en €bn -> se muestra en M€ (millones de euros)
 // listener del checkbox
 document.addEventListener('DOMContentLoaded',()=>{
   const cb=document.getElementById('searchAnnShow');
@@ -937,6 +951,7 @@ function buildCompanyFicha(name, scope){
   const shareLbl = scope ? `% of ${scopeLabel} total in database` : `% of world total in database`;
   const cityHint = scope ? ` in ${scopeLabel}` : '';
   const rows=[
+    ['1. Company Overview','Company type',companyTypeLabel(name),'Hyperscaler / Neocloud / Colocation — classified by this dashboard (by operator name), not by BNEF'],
     ['1. Company Overview','Business description and cloud market position',null,'Understand strategic importance and financial capacity','business_description'],
     ['1. Company Overview',`Position in BNEF database (${scopeLabel})`,`${fmt(live,0)} MW live (${totalLive?(100*live/totalLive).toFixed(1):'—'}${'%'} — ${shareLbl}) · ${oper} operational DCs of ${rs.length} recorded${cityHint}`,'Calculated from database'],
     ['1. Company Overview','Main business drivers (proxy: BNEF segments)',topSeg.length?topSeg.map(([s,v])=>`${s}: ${fmt(v,0)} MW`).join(' · '):null,'Determines future DC demand and type of client'],
@@ -1038,13 +1053,13 @@ function renderCompanyModal(){
     </span>
   </div>
   <div class="fTabBar">
-    <button type="button" class="fTabBtn active" data-ftab="perfil" onclick="fichaTab('perfil',this)">Perfil y comentarios</button>
-    <button type="button" class="fTabBtn" data-ftab="stats" onclick="fichaTab('stats',this)">Estadísticas y gráficos</button>
-    <button type="button" class="fTabBtn" data-ftab="anuncios" onclick="fichaTab('anuncios',this)">Anuncios</button>
+    <button type="button" class="fTabBtn active" data-ftab="perfil" onclick="fichaTab('perfil',this)">Profile & comments</button>
+    <button type="button" class="fTabBtn" data-ftab="stats" onclick="fichaTab('stats',this)">Statistics & charts</button>
+    <button type="button" class="fTabBtn" data-ftab="anuncios" onclick="fichaTab('anuncios',this)">Announcements</button>
   </div>
 
   <div class="fTab" data-ftab="perfil">
-    <div class="fTabPrintTitle">1 · Perfil y comentarios</div>
+    <div class="fTabPrintTitle">1 · Profile & comments</div>
     <div class="mini" style="margin-bottom:14px">Manual searches:
       <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+strategy+MW+investment">DC strategy</a>
       <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+PPA+renewable+energy+data+center">energy / PPAs</a>
@@ -1055,7 +1070,7 @@ function renderCompanyModal(){
   </div>
 
   <div class="fTab fTab-hidden" data-ftab="stats">
-    <div class="fTabPrintTitle">2 · Estadísticas y gráficos</div>
+    <div class="fTabPrintTitle">2 · Statistics & charts</div>
     ${companyStatsHTML(f)}
     <div class="panel" style="margin-top:6px"><h3>${f.name} facilities${f.market?' in '+f.market:''} (top 30 by live MW)</h3>
       <div style="overflow-x:auto;max-height:280px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Country</th><th class="num">Live</th><th class="num">Constr.</th><th class="num" title="BNEF Pipeline">BNEF Pipe</th><th>First live</th></tr></thead>
@@ -1064,7 +1079,7 @@ function renderCompanyModal(){
   </div>
 
   <div class="fTab fTab-hidden" data-ftab="anuncios">
-    <div class="fTabPrintTitle">3 · Anuncios</div>
+    <div class="fTabPrintTitle">3 · Announcements</div>
     ${companyAnnPanelHTML(f)}
     <div class="panel" id="fichaAnnouncements" style="margin-top:6px">
       <h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> Prospective announcements for ${escapeHTML(f.name)}</h3>
@@ -1129,7 +1144,7 @@ function loadFichaAnnouncements(companyName, scopeStr){
   html += '<div class="kpis" style="margin-bottom:10px">' + kpiHTML([
     [scoped.length + ' announcements', 'Matching scope'],
     [fmt(totMW,0) + ' MW', 'Announced MW (disclosed)'],
-    [fmt(totCX,2) + ' €bn', 'Announced capex'],
+    [fmt(mEur(totCX),0) + ' M€', 'Announced capex'],
     [countries.length, 'Countries']
   ]) + '</div>';
 
@@ -1141,10 +1156,10 @@ function loadFichaAnnouncements(companyName, scopeStr){
     html += '<h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px">'
       + escapeHTML(ctry) + ' <span style="color:var(--dim);font-weight:normal;letter-spacing:0;text-transform:none">· '
       + items.length + ' announcement' + (items.length>1?'s':'') + ' · '
-      + fmt(cMW,0) + ' MW' + (cCX>0 ? ' · ' + fmt(cCX,2) + ' €bn' : '')
+      + fmt(cMW,0) + ' MW' + (cCX>0 ? ' · ' + fmt(mEur(cCX),0) + ' M€' : '')
       + '</span></h4>';
     html += '<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr>'
-      + '<th>Project</th><th>Location</th><th class="num">MW</th><th class="num">Capex</th>'
+      + '<th>Project</th><th>Location</th><th class="num">MW</th><th class="num">Capex (M€)</th>'
       + '<th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th>'
       + '</tr></thead><tbody>';
     items.forEach(a => {
@@ -1154,7 +1169,7 @@ function loadFichaAnnouncements(companyName, scopeStr){
         + '<td>' + escapeHTML(a.project || '—') + '</td>'
         + '<td>' + escapeHTML(locHint || ctry) + '</td>'
         + '<td class="num">' + fmt(a.mw) + '</td>'
-        + '<td class="num">' + fmt(a.capex_usd_bn, 2) + '</td>'
+        + '<td class="num">' + fmt(mEur(a.capex_usd_bn), 0) + '</td>'
         + '<td>' + escapeHTML(a.phase || '—') + '</td>'
         + '<td>' + escapeHTML(capFirst(a.confidence || '—')) + '</td>'
         + '<td>' + escapeHTML(a.ann_date || '—') + '</td>'
@@ -1424,7 +1439,7 @@ function companyAnnByCountry(f){
   const byIso={}, byName={};
   scoped.forEach(a=>{
     if(a.phase==='platform') return;
-    const cx=(a.capex_usd_bn!=null?+a.capex_usd_bn:0);
+    const cx=(a.capex_usd_bn!=null?mEur(+a.capex_usd_bn):0);
     if(!cx||isNaN(cx)) return;
     const iso=a.iso3||null, nm=a.country||iso||'—';
     if(iso){ byIso[iso]=byIso[iso]||{name:nm,cap:0}; byIso[iso].cap+=cx; }
@@ -1442,7 +1457,7 @@ function drawCompanyAnnViz(f){
   if(!names.length){ if(empty)empty.style.display='block'; if(wrap)wrap.style.display='none'; return; }
   if(empty)empty.style.display='none'; if(wrap)wrap.style.display='';
   const ent=Object.entries(byName).sort((a,b)=>b[1]-a[1]).slice(0,15);
-  try{ bar('coChartAnn',ent.map(x=>x[0]),ent.map(x=>Math.round(x[1]*100)/100),'#c85a12'); }catch(_){}
+  try{ bar('coChartAnn',ent.map(x=>x[0]),ent.map(x=>Math.round(x[1])),'#c85a12'); }catch(_){}
   try{ drawAnnMap('coAnnMap',byIso); }catch(_){}
 }
 
@@ -1481,7 +1496,7 @@ function drawAnnMap(canvasId,byIso){
     if(o&&any) hit.push({iso:ft.id,o:o,minx:minx,miny:miny,maxx:maxx,maxy:maxy});
   });
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  hit.forEach(h=>{ const val=h.o.cap; const label='€'+(val>=10?val.toFixed(0):val.toFixed(1))+'bn';
+  hit.forEach(h=>{ const val=h.o.cap; const label=fmt(val,0)+' M€';
     const bw=h.maxx-h.minx, bh=h.maxy-h.miny, fontPx=Math.max(9,Math.min(15,Math.floor(bh/3)));
     ctx.font=fontPx+'px system-ui, sans-serif';
     const lp=(typeof LABELS!=='undefined'&&LABELS[h.iso])?LABELS[h.iso]:null;
@@ -1489,9 +1504,9 @@ function drawAnnMap(canvasId,byIso){
     if(ctx.measureText(label).width<bw*1.15){ const dk=['#c85512','#8f3a0b','#ee6f2c'].indexOf(colorFor(val,breaks))>=0; ctx.fillStyle=dk?'#fff':'#5a2d08'; ctx.fillText(label,cx,cy); }
   });
   const leg=document.getElementById('coAnnMapLegend');
-  if(leg){ let s='<span>Low</span>'; for(let i=0;i<MAP_COLORS.length;i++){ s+='<span style="width:26px;height:12px;background:'+MAP_COLORS[i]+';display:inline-block;border:1px solid #cfc7bd"></span>'; } s+='<span>High</span> · announced capex (€bn), quantile scale · grey = no announcement'; leg.innerHTML=s; }
+  if(leg){ let s='<span>Low</span>'; for(let i=0;i<MAP_COLORS.length;i++){ s+='<span style="width:26px;height:12px;background:'+MAP_COLORS[i]+';display:inline-block;border:1px solid #cfc7bd"></span>'; } s+='<span>High</span> · announced capex (M€), quantile scale · grey = no announcement'; leg.innerHTML=s; }
   const tip=document.getElementById('coAnnMapTip');
-  cv.onmousemove=function(e){ const rect=cv.getBoundingClientRect(); const mx=(e.clientX-rect.left)/rect.width*cv.width, my=(e.clientY-rect.top)/rect.height*cv.height; let best=null,ba=Infinity; hit.forEach(h=>{ if(mx>=h.minx&&mx<=h.maxx&&my>=h.miny&&my<=h.maxy){ const a=(h.maxx-h.minx)*(h.maxy-h.miny); if(a<ba){ba=a;best=h;} } }); if(!best){ if(tip)tip.style.display='none'; cv.style.cursor='default'; return; } cv.style.cursor='pointer'; if(tip){ tip.style.display='block'; tip.style.left=(e.clientX-rect.left+12)+'px'; tip.style.top=(e.clientY-rect.top+12)+'px'; tip.innerHTML='<b>'+best.o.name+'</b><br>Announced: $'+(Math.round(best.o.cap*100)/100)+'bn'; } };
+  cv.onmousemove=function(e){ const rect=cv.getBoundingClientRect(); const mx=(e.clientX-rect.left)/rect.width*cv.width, my=(e.clientY-rect.top)/rect.height*cv.height; let best=null,ba=Infinity; hit.forEach(h=>{ if(mx>=h.minx&&mx<=h.maxx&&my>=h.miny&&my<=h.maxy){ const a=(h.maxx-h.minx)*(h.maxy-h.miny); if(a<ba){ba=a;best=h;} } }); if(!best){ if(tip)tip.style.display='none'; cv.style.cursor='default'; return; } cv.style.cursor='pointer'; if(tip){ tip.style.display='block'; tip.style.left=(e.clientX-rect.left+12)+'px'; tip.style.top=(e.clientY-rect.top+12)+'px'; tip.innerHTML='<b>'+best.o.name+'</b><br>Announced: '+fmt(best.o.cap,0)+' M€'; } };
   cv.onmouseleave=function(){ if(tip)tip.style.display='none'; };
 }
 window.openDCByIdx = i=>openDC(R[i]);
@@ -1572,10 +1587,10 @@ function pendingRows(){ return currentFicha.rows.filter(r=>r.val==null); }
 function companyAnnPanelHTML(f){
   return `
   <div class="panel" style="margin-top:14px" id="coAnnPanel"><h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> ${f.name} — announced investment by country${f.market?' · '+f.market+' view':''}</h3>
-    <p class="mini" style="color:var(--dim);margin:2px 0 10px">Forward-looking investment announcements tracked in the dashboard, shown as announced capex (€bn) by country. Separate prospective layer — do <b>not</b> add to BNEF live/pipeline capacity.</p>
+    <p class="mini" style="color:var(--dim);margin:2px 0 10px">Forward-looking investment announcements tracked in the dashboard, shown as announced capex (M€) by country. Separate prospective layer — do <b>not</b> add to BNEF live/pipeline capacity.</p>
     <div id="coAnnEmpty" style="display:none;padding:10px;color:var(--dim);font-size:12px">No dashboard announcements for ${escapeHTML(f.name)} yet${f.market?' in '+escapeHTML(f.market):''}.</div>
     <div id="coAnnWrap" class="stats-grid">
-      <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Announced capex (€bn) by country</h4><div class="chartbox" style="height:280px"><canvas id="coChartAnn"></canvas></div></div>
+      <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Announced capex (M€) by country</h4><div class="chartbox" style="height:280px"><canvas id="coChartAnn"></canvas></div></div>
       <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Map — announced capex by country</h4>
         <div style="position:relative"><canvas id="coAnnMap" style="width:100%;display:block;border:1px solid var(--line,#e5ded5);border-radius:4px;background:#f0ece7"></canvas>
           <div id="coAnnMapTip" style="display:none;position:absolute;pointer-events:none;background:#fff;border:1px solid #cfc7bd;border-radius:4px;padding:4px 8px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5"></div>
@@ -1836,10 +1851,10 @@ function renderStatsAnn(){
   const eu = items.filter(a=>a.europe);
   host.innerHTML = kpiHTML([
     [items.length,'Announcements tracked'],
-    ['€'+fmt(totCapex,0)+' bn','Disclosed capex'],
+    [fmt(mEur(totCapex),0)+' M€','Disclosed capex'],
     [fmt(totMW,0)+' MW','Announced MW (excl. platforms)'],
     [eu.length,'European announcements'],
-    ['€'+fmt(eu.reduce((s,a)=>s+(a.capex_usd_bn||0),0),0)+' bn','European capex disclosed']
+    [fmt(mEur(eu.reduce((s,a)=>s+(a.capex_usd_bn||0),0)),0)+' M€','European capex disclosed']
   ]);
 }
 
@@ -2041,10 +2056,10 @@ function renderAnn(){
   const euCapex=eu.reduce((s,a)=>s+(a.capex_usd_bn||0),0);
   els('annKpis').innerHTML=kpiHTML([
     [items.length,'Announcements tracked'],
-    ['€'+fmt(totCapex,0)+' bn','Disclosed capex (where known)'],
+    [fmt(mEur(totCapex),0)+' M€','Disclosed capex (where known)'],
     [fmt(totMW,0)+' MW','Announced MW (excl. platforms)'],
     [eu.length,'European announcements'],
-    ['€'+fmt(euCapex,0)+' bn','European capex disclosed']
+    [fmt(mEur(euCapex),0)+' M€','European capex disclosed']
   ]);
   els('annTitle').textContent='Announced investments — '+(els('annScope')&&els('annScope').value==='eu'?'Europe':'world')+' ranking · sorted by '+(sort==='mw'?'announced MW':sort==='date'?'date':'capex');
   // ranking
@@ -2063,7 +2078,7 @@ function renderAnn(){
     '<tr><td>'+(i+1)+'</td><td><b>'+a.project+'</b>'+(a.notes?'<div style="font-size:11px;color:var(--dim);max-width:340px">'+a.notes+'</div>':'')+'</td>'+
     '<td>'+a.company+'</td><td>'+a.country+'</td>'+
     '<td class="num">'+(a.mw?fmt(a.mw,0):'—')+'</td>'+
-    '<td class="num">'+(a.capex_usd_bn?('€'+fmt(a.capex_usd_bn,1)):'—')+'</td>'+
+    '<td class="num">'+(a.capex_usd_bn?(fmt(mEur(a.capex_usd_bn),0)+' M€'):'—')+'</td>'+
     '<td>'+capFirst(a.phase)+'</td><td>'+confBadge(a.confidence)+'</td><td>'+a.date+'</td>'+
     '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td>'+'<td style="font-size:11px;color:'+(a._created_by==='seed@import'?'var(--dim)':'#333')+'">'+(a._created_by==='seed@import'?'—':(a._updated_by&&a._updated_by!==a._created_by?(a._created_by+' · edited by '+a._updated_by):a._created_by))+'</td>'+(window.Collab&&window.Collab.isAuthorized()&&a.id&&a._created_by!=='seed@import'?('<td><button class="btn" style="font-size:11px;padding:2px 6px" onclick="openAnnEditor(\''+a.id+'\')">Edit</button> <button class="btn" style="font-size:11px;padding:2px 6px" onclick="deleteAnn(\''+a.id+'\')">Del</button></td>'):(window.Collab&&window.Collab.isAuthorized()?'<td style="color:var(--dim);font-size:11px">seed</td>':'<td></td>'))+'</tr>'
      );
@@ -2075,7 +2090,7 @@ function renderAnn(){
     byC[a.country]=byC[a.country]||{n:0,mw:0,capex:0};
     byC[a.country].n++; byC[a.country].mw+=a.mw||0; byC[a.country].capex+=a.capex_usd_bn||0; });
   els('annCountry').querySelector('tbody').innerHTML=Object.entries(byC).sort((x,y)=>y[1].capex-x[1].capex).map(([c,o])=>
-    '<tr><td>'+c+'</td><td class="num">'+o.n+'</td><td class="num">'+(o.mw?fmt(o.mw,0):'—')+'</td><td class="num">'+(o.capex?('€'+fmt(o.capex,1)):'—')+'</td></tr>').join('');
+    '<tr><td>'+c+'</td><td class="num">'+o.n+'</td><td class="num">'+(o.mw?fmt(o.mw,0):'—')+'</td><td class="num">'+(o.capex?(fmt(mEur(o.capex),0)+' M€'):'—')+'</td></tr>').join('');
  }catch(e){ console.error('renderAnn failed:',e); const k=els('annKpis'); if(k)k.innerHTML='<div style="color:#c0392b;padding:10px">Announcements error: '+(e&&e.message||e)+'</div>'; }
 }
 // poblar filtro de fases y listeners
@@ -2120,7 +2135,7 @@ function openAnnEditor(id){
         <label>Region<select id="_ann_region"><option value="EMEA"${a.region==='EMEA'?' selected':''}>EMEA</option><option value="AMER"${a.region==='AMER'?' selected':''}>AMER</option><option value="APAC"${a.region==='APAC'?' selected':''}>APAC</option></select></label>
         <label>Europe<select id="_ann_europe"><option value="false"${!a.europe?' selected':''}>No</option><option value="true"${a.europe?' selected':''}>Yes</option></select></label>
         <label>MW announced<input id="_ann_mw" type="number" step="1" value="${a.mw??''}"></label>
-        <label>Capex €bn (enter in euros)<input id="_ann_capex" type="number" step="0.1" value="${a.capex_usd_bn??''}"></label>
+        <label>Capex M€ (enter in € millions)<input id="_ann_capex" type="number" step="10" value="${a.capex_usd_bn!=null?Math.round(a.capex_usd_bn*1000):''}"></label>
         <label>Phase *<select id="_ann_phase">${['land','grid','permitting','announced','construction','contracted','platform'].map(p=>`<option value="${p}"${a.phase===p?' selected':''}>${capFirst(p)}</option>`).join('')}</select></label>
         <label>Confidence *<select id="_ann_confidence">${['high','medium','low'].map(c=>`<option value="${c}"${a.confidence===c?' selected':''}>${capFirst(c)}</option>`).join('')}</select></label>
         <label style="grid-column:1/-1">Date (YYYY-MM)<input id="_ann_date" placeholder="2026-07" value="${a.date||''}"></label>
@@ -2159,7 +2174,7 @@ function openAnnEditor(id){
       region: g('region'),
       europe: g('europe')==='true',
       mw: g('mw') ? Number(g('mw')) : null,
-      capex_usd_bn: g('capex') ? Number(g('capex')) : null,
+      capex_usd_bn: g('capex') ? Number(g('capex'))/1000 : null,
       phase: g('phase'), confidence: g('confidence'),
       ann_date: g('date') || null,
       source: g('source'), url: g('url'), notes: g('notes') || null
@@ -2266,13 +2281,16 @@ function companyTypeOf(name){
   if(COMPANY_TYPES.colo.has(name)) return 'colo';
   return null;
 }
-function mapScoped(){ // filas tras filtros del buscador + filtros propios del mapa
+const COMPANY_TYPE_LABEL = { hyper:'Hyperscaler', neo:'Neocloud', colo:'Colocation', '':'Other / unclassified' };
+const COMPANY_TYPE_COLOR = { hyper:'#c85512', neo:'#2b7a78', colo:'#3a3a3c', '':'#8a8178' };
+function companyTypeLabel(name){ return COMPANY_TYPE_LABEL[companyTypeOf(name)||'']; }
+function mapScoped(){ // filas con los filtros propios del mapa (independientes de la base de datos)
   const co=(els('mapCompany')?els('mapCompany').value.trim().toLowerCase():'');
   const ct=(els('mapCompanyType')?els('mapCompanyType').value:'');
   const sc=(els('mapSubcat')?els('mapSubcat').value:'');
   const st=(els('mapStatus2')?els('mapStatus2').value:'');
   const sz=(els('mapSize')?els('mapSize').value:'');
-  return filtered.filter(r=>{
+  return R.filter(r=>{
     if(co && !(r[C.company]||'').toLowerCase().includes(co)) return false;
     if(ct && companyTypeOf(r[C.company])!==ct) return false;
     if(sc && r[C.subcategory]!==sc) return false;
@@ -2519,26 +2537,26 @@ function openMapCountryDetail(marketName){
       html+='<div class="kpis">'+kpiHTML([
         [annsHere.length+' announcements','Matching filters'],
         [fmt(totMW,0)+' MW','Announced MW (disclosed)'],
-        [fmt(totCX,2)+' €bn','Announced capex'],
+        [fmt(mEur(totCX),0)+' M€','Announced capex'],
         [compsAnn.length,'Companies']
       ])+'</div>';
 
       html+='<div class="panel"><h3>By company ('+compsAnn.length+')</h3>'+
-        '<div style="overflow-x:auto"><table><thead><tr><th>Company</th><th class="num"># ann.</th><th class="num">MW</th><th class="num">Capex €bn</th></tr></thead><tbody>'+
+        '<div style="overflow-x:auto"><table><thead><tr><th>Company</th><th class="num"># ann.</th><th class="num">MW</th><th class="num">Capex M€</th></tr></thead><tbody>'+
         compsAnn.map(function(x){
           return '<tr><td>'+escapeHTML(x[0])+'</td>'+
             '<td class="num">'+x[1].n+'</td>'+
             '<td class="num">'+fmt(x[1].mw,0)+'</td>'+
-            '<td class="num">'+fmt(x[1].cx,2)+'</td></tr>';
+            '<td class="num">'+fmt(mEur(x[1].cx),0)+'</td></tr>';
         }).join('')+'</tbody></table></div></div>';
 
       html+='<div class="panel"><h3>Announcements detail ('+annsHere.length+')</h3>'+
-        '<div style="overflow-x:auto;max-height:400px;overflow-y:auto"><table><thead><tr><th>Project</th><th>Company</th><th class="num">MW</th><th class="num">Capex</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th></tr></thead><tbody>'+
+        '<div style="overflow-x:auto;max-height:400px;overflow-y:auto"><table><thead><tr><th>Project</th><th>Company</th><th class="num">MW</th><th class="num">Capex (M€)</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th></tr></thead><tbody>'+
         annsHere.sort(function(a,b){return (b.mw||0)-(a.mw||0);}).map(function(a){
           return '<tr><td>'+escapeHTML(a.project||'—')+'</td>'+
             '<td>'+escapeHTML(a.company||'—')+'</td>'+
             '<td class="num">'+fmt(a.mw)+'</td>'+
-            '<td class="num">'+fmt(a.capex_usd_bn,2)+'</td>'+
+            '<td class="num">'+fmt(mEur(a.capex_usd_bn),0)+'</td>'+
             '<td>'+escapeHTML(a.phase||'—')+'</td>'+
             '<td>'+escapeHTML(capFirst(a.confidence||'—'))+'</td>'+
             '<td>'+escapeHTML(a.ann_date||'—')+'</td>'+
@@ -2748,6 +2766,7 @@ function renderCompanies(){
 
   const q=(els('coSearch')?.value||'').trim().toLowerCase();
   const re=els('coRegion')?els('coRegion').value:'';
+  const ty=els('coType')?els('coType').value:'';
   const sortMode=els('coSort')?els('coSort').value:'modified';
 
   // agregar empresas desde la base BNEF
@@ -2777,6 +2796,8 @@ function renderCompanies(){
     const rEnt=Object.keys(m.regions).map(k=>[k,m.regions[k]]).sort((a,b)=>b[1]-a[1]);
     m.region = rEnt.length?rEnt[0][0]:'';
     m.topCountries = Object.keys(m.countries).map(k=>[k,m.countries[k]]).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]);
+    m.type = (typeof companyTypeOf==='function') ? companyTypeOf(co) : null;
+    m.typeLbl = COMPANY_TYPE_LABEL[m.type||''];
     const a=act[co]||{};
     m.anns=a.anns||0; m.userEdits=a.userEdits||0; m.lastBy=a.lastBy||null; m.lastAt=a.lastAt||null;
     return m;
@@ -2784,6 +2805,7 @@ function renderCompanies(){
 
   if(q) rows=rows.filter(r=>r.co.toLowerCase().includes(q));
   if(re) rows=rows.filter(r=>r.region===re);
+  if(ty){ rows = (ty==='other') ? rows.filter(r=>!r.type) : rows.filter(r=>r.type===ty); }
 
   const byLive=(a,b)=>b.live-a.live;
   if(sortMode==='name') rows.sort((a,b)=>a.co.localeCompare(b.co));
@@ -2822,7 +2844,7 @@ function renderCompanies(){
     '<td class="num">'+fmt(r.live)+'</td>'+
     '<td class="num">'+fmt(r.uc)+'</td>'+
     '<td class="num">'+fmt(r.pipe)+'</td>'+
-    '<td style="font-size:12px">'+(r.topCountries.length?escapeHTML(r.topCountries.join(', ')):'—')+'</td>'+
+    '<td><span style="display:inline-block;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600;color:#fff;background:'+(COMPANY_TYPE_COLOR[r.type||''])+'">'+escapeHTML(r.typeLbl)+'</span></td>'+
     '<td style="font-size:11px">'+ (r.userEdits>0
         ? '<span style="color:#1e6b34">✎ '+escapeHTML(r.lastBy||'user')+(r.lastAt?' · '+escapeHTML(String(r.lastAt).slice(0,10)):'')+'</span>'
         : (r.anns>0 ? (r.anns+' announcement'+(r.anns>1?'s':'')) : '<span style="color:var(--dim)">—</span>')) +'</td>'+
@@ -2837,7 +2859,7 @@ function renderCompanies(){
  }catch(e){ const k=els('coKpis'); if(k) k.innerHTML='<div style="padding:14px;color:#c0392b">Error rendering companies: '+escapeHTML(e.message||String(e))+'</div>'; }
 }
 (function(){ // filtros: al cambiar, volver a página 1
-  ['coSearch','coRegion','coSort'].forEach(id=>{ const el=els(id); if(!el) return;
+  ['coSearch','coRegion','coType','coSort'].forEach(id=>{ const el=els(id); if(!el) return;
     const ev = id==='coSearch' ? 'input' : 'change';
     el.addEventListener(ev, ()=>{ coPage=1; renderCompanies(); });
   });
