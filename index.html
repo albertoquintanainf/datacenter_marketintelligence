@@ -1286,6 +1286,96 @@ function drawCompanyCharts(f){
   const cat={}; rs.forEach(r=>{const k=r[C.category]; if(k)cat[k]=(cat[k]||0)+(r[C.live]||0);});
   const catE=Object.entries(cat).sort((a,b)=>b[1]-a[1]);
   try{ bar('coChartCat',catE.map(x=>x[0]),catE.map(x=>Math.round(x[1])),'#c85512',false); }catch(_){}
+  try{ drawCompanyAnnViz(f); }catch(_){}
+}
+
+/* ============================================================
+ * FICHA · Anuncios (capa prospectiva) representados POR PAÍS
+ * Barra + mapa (auto-encuadrado a los países con anuncios).
+ * Métrica: capex anunciado (US$ bn), que es la cifra realmente
+ * publicada en la mayoría de anuncios; NO se mezcla con BNEF.
+ * ============================================================ */
+function companyAnnByCountry(f){
+  const list=(typeof ANN!=='undefined'?ANN:[]).filter(a=>a.company===f.name);
+  const sc=parseScope(f.scopeStr||'');
+  let scoped=list;
+  if(sc){
+    if(sc.kind==='C') scoped=list.filter(a=>a.country===sc.val);
+    else if(sc.kind==='R') scoped=list.filter(a=>a.region===sc.val);
+    else if(sc.kind==='G') scoped=list.filter(a=>GEOS[sc.val]&&GEOS[sc.val].has(a.country));
+  }
+  const byIso={}, byName={};
+  scoped.forEach(a=>{
+    if(a.phase==='platform') return;
+    const cx=(a.capex_usd_bn!=null?+a.capex_usd_bn:0);
+    if(!cx||isNaN(cx)) return;
+    const iso=a.iso3||null, nm=a.country||iso||'—';
+    if(iso){ byIso[iso]=byIso[iso]||{name:nm,cap:0}; byIso[iso].cap+=cx; }
+    byName[nm]=(byName[nm]||0)+cx;
+  });
+  return {byIso,byName};
+}
+
+function drawCompanyAnnViz(f){
+  if(!f) return;
+  const panel=document.getElementById('coAnnPanel'); if(!panel) return;
+  const {byIso,byName}=companyAnnByCountry(f);
+  const names=Object.keys(byName);
+  const empty=document.getElementById('coAnnEmpty'), wrap=document.getElementById('coAnnWrap');
+  if(!names.length){ if(empty)empty.style.display='block'; if(wrap)wrap.style.display='none'; return; }
+  if(empty)empty.style.display='none'; if(wrap)wrap.style.display='';
+  const ent=Object.entries(byName).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  try{ bar('coChartAnn',ent.map(x=>x[0]),ent.map(x=>Math.round(x[1]*100)/100),'#c85a12'); }catch(_){}
+  try{ drawAnnMap('coAnnMap',byIso); }catch(_){}
+}
+
+function drawAnnMap(canvasId,byIso){
+  const cv=document.getElementById(canvasId);
+  if(!cv||typeof WORLD==='undefined'||!WORLD||!WORLD.features) return;
+  const isos=Object.keys(byIso).filter(k=>byIso[k].cap>0);
+  if(!isos.length) return;
+  // bounding box de los países con anuncios
+  let lon0=180,lon1=-180,lat0=90,lat1=-90;
+  WORLD.features.forEach(ft=>{ if(!byIso[ft.id]||!ft.geometry) return;
+    const polys=ft.geometry.type==='Polygon'?[ft.geometry.coordinates]:(ft.geometry.type==='MultiPolygon'?ft.geometry.coordinates:[]);
+    polys.forEach(poly=>poly.forEach(ring=>ring.forEach(pt=>{ if(pt[0]<lon0)lon0=pt[0]; if(pt[0]>lon1)lon1=pt[0]; if(pt[1]<lat0)lat0=pt[1]; if(pt[1]>lat1)lat1=pt[1]; })));
+  });
+  if(lon0>lon1||lat0>lat1) return;
+  const padx=Math.max(3,(lon1-lon0)*0.18), pady=Math.max(3,(lat1-lat0)*0.18);
+  lon0-=padx; lon1+=padx; lat0-=pady; lat1+=pady;
+  const spanLon=(lon1-lon0)||1, spanLat=(lat1-lat0)||1, aspect=spanLon/spanLat;
+  const host=cv.parentElement, cssW=(host&&host.clientWidth)?host.clientWidth:600;
+  const bufW=1000, bufH=Math.max(200,Math.round(bufW/aspect));
+  cv.width=bufW; cv.height=bufH; cv.style.height=Math.round((cssW||600)/aspect)+'px';
+  const ctx=cv.getContext('2d'); if(!ctx) return;
+  const W=cv.width,H=cv.height;
+  const px=lon=>(lon-lon0)/spanLon*W, py=lat=>(lat1-lat)/spanLat*H;
+  ctx.clearRect(0,0,W,H); ctx.fillStyle='#f0ece7'; ctx.fillRect(0,0,W,H);
+  const breaks=quantileBreaks(isos.map(k=>byIso[k].cap),MAP_COLORS.length);
+  const hit=[];
+  WORLD.features.forEach(ft=>{ const o=byIso[ft.id]; const fill=o?colorFor(o.cap,breaks):'#e6e0d8';
+    const geom=ft.geometry; if(!geom) return;
+    const polys=geom.type==='Polygon'?[geom.coordinates]:(geom.type==='MultiPolygon'?geom.coordinates:[]);
+    let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9,any=false;
+    polys.forEach(poly=>poly.forEach(ring=>{ if(!ring.length) return; ctx.beginPath();
+      ring.forEach((pt,k)=>{ const x=px(pt[0]),y=py(pt[1]); if(k===0)ctx.moveTo(x,y);else ctx.lineTo(x,y); if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y; any=true; });
+      ctx.closePath(); ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle='#cfc7bd'; ctx.lineWidth=0.5; ctx.stroke();
+    }));
+    if(o&&any) hit.push({iso:ft.id,o:o,minx:minx,miny:miny,maxx:maxx,maxy:maxy});
+  });
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  hit.forEach(h=>{ const val=h.o.cap; const label='$'+(val>=10?val.toFixed(0):val.toFixed(1))+'bn';
+    const bw=h.maxx-h.minx, bh=h.maxy-h.miny, fontPx=Math.max(9,Math.min(15,Math.floor(bh/3)));
+    ctx.font=fontPx+'px system-ui, sans-serif';
+    const lp=(typeof LABELS!=='undefined'&&LABELS[h.iso])?LABELS[h.iso]:null;
+    const cx=lp?px(lp[0]):(h.minx+h.maxx)/2, cy=lp?py(lp[1]):(h.miny+h.maxy)/2;
+    if(ctx.measureText(label).width<bw*1.15){ const dk=['#c85512','#8f3a0b','#ee6f2c'].indexOf(colorFor(val,breaks))>=0; ctx.fillStyle=dk?'#fff':'#5a2d08'; ctx.fillText(label,cx,cy); }
+  });
+  const leg=document.getElementById('coAnnMapLegend');
+  if(leg){ let s='<span>Low</span>'; for(let i=0;i<MAP_COLORS.length;i++){ s+='<span style="width:26px;height:12px;background:'+MAP_COLORS[i]+';display:inline-block;border:1px solid #cfc7bd"></span>'; } s+='<span>High</span> · announced capex (US$bn), quantile scale · grey = no announcement'; leg.innerHTML=s; }
+  const tip=document.getElementById('coAnnMapTip');
+  cv.onmousemove=function(e){ const rect=cv.getBoundingClientRect(); const mx=(e.clientX-rect.left)/rect.width*cv.width, my=(e.clientY-rect.top)/rect.height*cv.height; let best=null,ba=Infinity; hit.forEach(h=>{ if(mx>=h.minx&&mx<=h.maxx&&my>=h.miny&&my<=h.maxy){ const a=(h.maxx-h.minx)*(h.maxy-h.miny); if(a<ba){ba=a;best=h;} } }); if(!best){ if(tip)tip.style.display='none'; cv.style.cursor='default'; return; } cv.style.cursor='pointer'; if(tip){ tip.style.display='block'; tip.style.left=(e.clientX-rect.left+12)+'px'; tip.style.top=(e.clientY-rect.top+12)+'px'; tip.innerHTML='<b>'+best.o.name+'</b><br>Announced: $'+(Math.round(best.o.cap*100)/100)+'bn'; } };
+  cv.onmouseleave=function(){ if(tip)tip.style.display='none'; };
 }
 window.openDCByIdx = i=>openDC(R[i]);
 
@@ -1336,6 +1426,19 @@ function companyStatsHTML(f){
       <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Live MW by subcategory</h4><div class="chartbox" style="height:260px"><canvas id="coChartSub"></canvas></div></div>
       <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Live vs construction vs pipeline by country (top 12)</h4><div class="chartbox" style="height:300px"><canvas id="coChartCap"></canvas></div></div>
       <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Facility category (live MW)</h4><div class="chartbox" style="height:300px"><canvas id="coChartCat"></canvas></div></div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:14px" id="coAnnPanel"><h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> ${f.name} — announced investment by country${f.market?' · '+f.market+' view':''}</h3>
+    <p class="mini" style="color:var(--dim);margin:2px 0 10px">Forward-looking investment announcements tracked in the dashboard, shown as announced capex (US$bn) by country. Separate prospective layer — do <b>not</b> add to BNEF live/pipeline capacity.</p>
+    <div id="coAnnEmpty" style="display:none;padding:10px;color:var(--dim);font-size:12px">No dashboard announcements for ${escapeHTML(f.name)} yet${f.market?' in '+escapeHTML(f.market):''}.</div>
+    <div id="coAnnWrap" class="stats-grid">
+      <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Announced capex (US$bn) by country</h4><div class="chartbox" style="height:280px"><canvas id="coChartAnn"></canvas></div></div>
+      <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Map — announced capex by country</h4>
+        <div style="position:relative"><canvas id="coAnnMap" style="width:100%;display:block;border:1px solid var(--line,#e5ded5);border-radius:4px;background:#f0ece7"></canvas>
+          <div id="coAnnMapTip" style="display:none;position:absolute;pointer-events:none;background:#fff;border:1px solid #cfc7bd;border-radius:4px;padding:4px 8px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5"></div>
+        </div>
+        <div id="coAnnMapLegend" class="mini" style="margin-top:6px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;color:var(--dim)"></div>
+      </div>
     </div>
   </div>
   <div class="panel" style="margin-top:14px"><h3>${f.name} — statistics${f.market?' · '+f.market+' view':''} (all database variables)</h3>
@@ -1759,6 +1862,8 @@ async function refreshAnnFromCollab(){
   if(document.getElementById('tab-map') && document.getElementById('tab-map').style.display!=='none' && typeof renderMap==='function') renderMap();
   if(document.getElementById('tab-search') && document.getElementById('tab-search').style.display!=='none' && typeof applyFilters==='function') applyFilters();
   if(document.getElementById('tab-stats') && document.getElementById('tab-stats').style.display!=='none' && typeof renderStats==='function') renderStats();
+  // si hay una ficha de empresa abierta, refrescar su viz de anuncios por país
+  try{ if(typeof currentFicha!=='undefined' && currentFicha && document.getElementById('modal') && document.getElementById('modal').classList.contains('open') && document.getElementById('coAnnPanel')) drawCompanyAnnViz(currentFicha); }catch(_){}
 }
 function annScoped(){
   const sc=els('annScope')?els('annScope').value:'';
