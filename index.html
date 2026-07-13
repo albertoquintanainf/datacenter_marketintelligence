@@ -79,6 +79,11 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .fw-row .c{color:var(--dim)}
 .fw-row .v{color:var(--txt)}
 .fw-row .v .na{color:#9aa7b6;font-style:italic}
+.fw-row .v-meta{font-size:11px;color:#7a8698;margin-top:3px;font-style:italic}
+.fw-row .v-meta:empty{display:none}
+.fw-row .c .fw-edit-btn, .fw-row .c .fw-hist-btn{background:none;border:none;cursor:pointer;font-size:11px;opacity:.4;padding:0 2px;margin-left:4px;color:#666}
+.fw-row .c .fw-edit-btn:hover, .fw-row .c .fw-hist-btn:hover{opacity:1;color:var(--accent)}
+.fw-edit-ta{transition:border-color .12s} .fw-edit-ta:focus{border-color:var(--accent,#f47220);outline:none}
 .chartbox{position:relative;height:300px}
 .tab-actions{display:flex;justify-content:flex-end;margin:0 0 10px 0}
 .tab-actions .btn{font-size:12px}
@@ -621,9 +626,13 @@ function openModal(html){ els('sheet').innerHTML='<button class="close" onclick=
 function closeModal(){ els('modal').classList.remove('open'); if(window._fichaChart){try{window._fichaChart.destroy();}catch(_){ } window._fichaChart=null;} delete chartBoxes['fichaChart']; ['coChartCountry','coChartSub','coChartCap','coChartCat'].forEach(id=>{ if(charts[id]){try{charts[id].destroy();}catch(_){ } delete charts[id];} delete chartBoxes[id]; }); }
 els('modal').addEventListener('click',e=>{ if(e.target.id==='modal') closeModal(); });
 
-function fwRow(c,v){
+function fwRow(c,v,fk){
   const vv = v==null ? '<span class="na">Pending — requires qualitative analysis</span>' : v;
-  return `<div class="fw-row"><div class="c">${c}</div><div class="v">${vv}</div></div>`;
+  const dataAttr = fk ? ` data-fk="${fk}"` : '';
+  const meta = fk ? `<div class="v-meta" data-meta-for="${fk}"></div>` : '';
+  const editBtn = fk ? `<button class="fw-edit-btn" title="Edit this field" data-edit-fk="${fk}" style="display:none">✎</button>
+    <button class="fw-hist-btn" title="Field history" data-hist-fk="${fk}" style="display:none">↻</button>` : '';
+  return `<div class="fw-row"${dataAttr}><div class="c">${c}${editBtn}</div><div class="v"><div class="v-content" data-val-for="${fk||''}">${vv}</div>${meta}</div></div>`;
 }
 const NA=null;
 
@@ -675,15 +684,15 @@ function buildCompanyFicha(name, scope){
   const shareLbl = scope ? `% of ${scopeLabel} total in database` : `% of world total in database`;
   const cityHint = scope ? ` in ${scopeLabel}` : '';
   const rows=[
-    ['1. Company Overview','Business description and cloud market position',null,'Understand strategic importance and financial capacity'],
+    ['1. Company Overview','Business description and cloud market position',null,'Understand strategic importance and financial capacity','business_description'],
     ['1. Company Overview',`Position in BNEF database (${scopeLabel})`,`${fmt(live,0)} MW live (${totalLive?(100*live/totalLive).toFixed(1):'—'}${'%'} — ${shareLbl}) · ${oper} operational DCs of ${rs.length} recorded${cityHint}`,'Calculated from database'],
     ['1. Company Overview','Main business drivers (proxy: BNEF segments)',topSeg.length?topSeg.map(([s,v])=>`${s}: ${fmt(v,0)} MW`).join(' · '):null,'Determines future DC demand and type of client'],
     ['1. Company Overview','Global Presence',scope?`View limited to ${scopeLabel}; global presence: see «Global» perspective`:`${Object.keys(regions).length} regions (${Object.entries(regions).map(([g,v])=>g+': '+fmt(v,0)+' MW').join(' · ')}) · ${Object.keys(markets).length} countries`,'Understands geography expansion'],
-    ['2. European / Regional Strategy',`Overall strategy${cityHint} (expansion, sovereignty, AI, cloud regions, edge)`,null,'Requires qualitative analysis'],
+    ['2. European / Regional Strategy',`Overall strategy${cityHint} (expansion, sovereignty, AI, cloud regions, edge)`,null,'Requires qualitative analysis','overall_strategy'],
     ['2. European / Regional Strategy',isCountry?'Priority locations within country (by live MW)':'Priority countries (by live MW)',topM.slice(0,6).map(([m,v])=>`${m} (${fmt(v.live,0)} MW, ${v.n} DC)`).join(' · ')||null,'Identify preferred investment markets'],
     ['2. European / Regional Strategy','Expansion (constr.+pipeline)',topPipe.slice(0,6).map(([m,v])=>`${m} (${fmt(v.uc+v.pipe,0)} MW)`).join(' · ')||'No pipeline recorded in database','Calculated from database'],
-    ['2. European / Regional Strategy','Reasons for country/site selection (grid, connectivity, incentives…)',null,'Identify main drivers for location decisions'],
-    ['2. European / Regional Strategy','Public long-term roadmap',null,'High level visibility of future investments'],
+    ['2. European / Regional Strategy','Reasons for country/site selection (grid, connectivity, incentives…)',null,'Identify main drivers for location decisions','reasons_site_selection'],
+    ['2. European / Regional Strategy','Public long-term roadmap',null,'High level visibility of future investments','public_roadmap'],
     ['3. Existing Data Center Portfolio','Number of operational DC & campuses',`${oper} facilities with live capacity > 0${cityHint}`,'Existing footprint'],
     ['3. Existing Data Center Portfolio','Estimated IT capacity (MW)',`${fmt(live,0)} MW live · ${fmt(sum(rs,'headline'),0)} MW headline`,'Real infrastructure size'],
     ['3. Existing Data Center Portfolio','Year commissioned (first live)',years.length?`First facility: ${Math.min(...years)} · most recent: ${Math.max(...years)}`:null,'Growth timeline'],
@@ -693,24 +702,25 @@ function buildCompanyFicha(name, scope){
     ['3. Existing Data Center Portfolio','Ownership model (owned / leased / colocation)',topSeg[0]?`Dominant category in database: ${topSeg[0][0]} — owned/leased detail pending`:null,'Infrastructure strategy'],
     ['3. Existing Data Center Portfolio','Land & built area',land>0?`${fmt(land/10000,0)} ha land · ${fmt(sum(rs,'building')/10000,1)} ha built`:null,'Calculated from database'],
     ['3. Existing Data Center Portfolio','Technology characteristics (GPUs, cooling…)',(dens.length||pues.length)?((dens.length?`Avg. reported power density ${(dens.reduce((a,b)=>a+b,0)/dens.length).toFixed(2)} · `:'')+(pues.length?`Avg. design PUE ${(pues.reduce((a,b)=>a+b,0)/pues.length).toFixed(2)} (${pues.length} DCs report)`:'')):null,'Hardware providers, cooling technology'],
-    ['3. Existing Data Center Portfolio','Investment deployed',null,'Investment by asset and country level'],
-    ['3. Existing Data Center Portfolio','Energy strategy (renewables targets)',null,'Requires qualitative analysis'],
-    ['3. Existing Data Center Portfolio','Energy procurement model (PPAs, ownership, utilities)',null,''],
-    ['3. Existing Data Center Portfolio','Renewable projects linked to DCs',null,''],
-    ['3. Existing Data Center Portfolio','Battery Energy Storage strategy',null,''],
-    ['3. Existing Data Center Portfolio','Grid services participation',null,''],
-    ['3. Existing Data Center Portfolio','Backup generation strategy (diesel / gas / hydrogen)',null,''],
-    ['3. Existing Data Center Portfolio','Water usage strategy',null,''],
+    ['3. Existing Data Center Portfolio','Investment deployed',null,'Investment by asset and country level','investment_deployed'],
+    ['3. Existing Data Center Portfolio','Energy strategy (renewables targets)',null,'Requires qualitative analysis','energy_strategy'],
+    ['3. Existing Data Center Portfolio','Energy procurement model (PPAs, ownership, utilities)',null,'','energy_procurement_existing'],
+    ['3. Existing Data Center Portfolio','Renewable projects linked to DCs',null,'','renewable_projects'],
+    ['3. Existing Data Center Portfolio','Battery Energy Storage strategy',null,'','bess_strategy'],
+    ['3. Existing Data Center Portfolio','Grid services participation',null,'','grid_services'],
+    ['3. Existing Data Center Portfolio','Backup generation strategy (diesel / gas / hydrogen)',null,'','backup_generation'],
+    ['3. Existing Data Center Portfolio','Water usage strategy',null,'','water_usage'],
     ['4. Development Pipeline','Number of facilities under construction',`${inUC} facilities · ${fmt(uc,0)} MW under construction${cityHint}`,'Location & size'],
     ['4. Development Pipeline','Other announced pipeline',`${fmt(pipe,0)} MW`,'Calculated from database'],
     ['4. Development Pipeline','Pipeline locations',topPipe.slice(0,8).map(([m,v])=>`${m}: ${fmt(v.uc+v.pipe,0)} MW`).join(' · ')||'—','Location & size'],
-    ['4. Development Pipeline','Expected commissioning dates',null,'Timing'],
-    ['4. Development Pipeline','Status dev portfolio (land secured, permitting, construction, announced)',null,'Project maturity'],
-    ['4. Development Pipeline','Investment committed',null,'Investment announced'],
-    ['4. Development Pipeline','Development strategy (inhouse, co-dev, M&A)',null,''],
-    ['4. Development Pipeline','Main Dev partners',null,'By country and/or opportunity'],
-    ['4. Development Pipeline','Energy procurement model',null,'PPAs, ownership, utilities'],
-  ].map(r=>({cat:r[0],crit:r[1],val:r[2],com:r[3]}));
+    ['4. Development Pipeline','Expected commissioning dates',null,'Timing','expected_commissioning'],
+    ['4. Development Pipeline','Status dev portfolio (land secured, permitting, construction, announced)',null,'Project maturity','dev_portfolio_status'],
+    ['4. Development Pipeline','Investment committed',null,'Investment announced','investment_committed'],
+    ['4. Development Pipeline','Development strategy (inhouse, co-dev, M&A)',null,'','development_strategy'],
+    ['4. Development Pipeline','Main Dev partners',null,'By country and/or opportunity','dev_partners'],
+    ['4. Development Pipeline','Energy procurement model',null,'PPAs, ownership, utilities','energy_procurement_pipeline'],
+    ['5. Comments','Free-text comments / additional notes',null,'Anything not covered above','free_comments'],
+  ].map(r=>({cat:r[0],crit:r[1],val:r[2],com:r[3],fk:r[4]||null}));
   return {name, market: scope?scopeLabel:'', scope, rs, allRs: R.filter(r=>r[C.company]===name), rows};
 }
 
@@ -738,7 +748,7 @@ function renderCompanyModal(){
   let lastCat='', body='';
   f.rows.forEach(r=>{
     if(r.cat!==lastCat){ if(lastCat)body+='</div>'; body+=`<div class="fw-cat"><h4>${r.cat}</h4>`; lastCat=r.cat; }
-    body+=fwRow(r.crit,r.val);
+    body+=fwRow(r.crit,r.val,r.fk);
   });
   body+='</div>';
   const q = encodeURIComponent(f.name+(f.market?' '+f.market:''));
@@ -759,6 +769,12 @@ function renderCompanyModal(){
     <button class="btn primary" onclick="downloadFichaXLSX()">⬇ Download profile (Excel)</button>
     <button class="btn" onclick="copyResearchPrompt()">📋 Copy research prompt</button>
     <button class="btn" onclick="printSheet()">🖨 Print / PDF</button>
+    <span id="fichaEditControls" style="display:none">
+      <button class="btn" id="btnEditFields" onclick="toggleFichaEdit(true)">✎ Edit fields</button>
+      <button class="btn primary" id="btnSaveFields" onclick="saveFichaEdits()" style="display:none">💾 Save all</button>
+      <button class="btn" id="btnCancelFields" onclick="toggleFichaEdit(false)" style="display:none">✕ Cancel</button>
+      <button class="btn" id="btnCompanyHistory" onclick="openCompanyHistoryModal()">📜 Full history</button>
+    </span>
   </div>
   <div class="mini" style="margin-bottom:14px">Manual searches:
     <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+strategy+MW+investment">DC strategy</a>
@@ -774,7 +790,220 @@ function renderCompanyModal(){
   </div>`;
   openModal(html);
   requestAnimationFrame(()=>requestAnimationFrame(()=>drawCompanyCharts(f)));
+  // Carga async de campos cualitativos (no bloquea el render)
+  loadFichaQualitative();
 }
+/* ============================================================
+ * FASE 2 · Edición de campos cualitativos en la ficha
+ * ============================================================ */
+let fichaEditMode = false;
+let fichaQualitativeCache = {};   // { fk: {value, updated_by, updated_at} }
+
+function currentFichaScopeKey(){
+  const f = currentFicha;
+  if(!f) return null;
+  return f.scopeStr || 'G:Global';
+}
+
+function fmtWhen(iso){
+  try{ return new Date(iso).toISOString().slice(0,10); }catch(_){ return String(iso).slice(0,10); }
+}
+
+async function loadFichaQualitative(){
+  if(!window.Collab || !window.Collab.ready) return;
+  const f = currentFicha;
+  if(!f) return;
+  const scope = currentFichaScopeKey();
+  const rows = await window.Collab.listQualitative(f.name, scope).catch(()=>[]);
+  fichaQualitativeCache = {};
+  (rows||[]).forEach(row=>{ fichaQualitativeCache[row.field_key] = row; });
+  // sobrescribir el valor mostrado y añadir el meta "Last edited by X on Y"
+  document.querySelectorAll('.fw-row[data-fk]').forEach(el=>{
+    const fk = el.getAttribute('data-fk');
+    const row = fichaQualitativeCache[fk];
+    const valEl = el.querySelector('.v-content');
+    const metaEl = el.querySelector('.v-meta');
+    if(row && row.value){
+      valEl.innerHTML = escapeHTML(row.value).replace(/\n/g,'<br>');
+    }
+    if(row && row.updated_by){
+      metaEl.innerHTML = `Last edited by <b>${escapeHTML(row.updated_by)}</b> on ${fmtWhen(row.updated_at)}`;
+    }
+  });
+  // mostrar el bloque de controles si Collab está autorizado
+  if(window.Collab.isAuthorized && window.Collab.isAuthorized()){
+    const ctrl = document.getElementById('fichaEditControls');
+    if(ctrl) ctrl.style.display = 'inline-flex';
+    // mostrar botones de historial junto a cada campo editable
+    document.querySelectorAll('[data-hist-fk]').forEach(b=> b.style.display='');
+  }
+}
+
+function escapeHTML(s){
+  if(s==null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleFichaEdit(on){
+  fichaEditMode = !!on;
+  const btnEdit = document.getElementById('btnEditFields');
+  const btnSave = document.getElementById('btnSaveFields');
+  const btnCanc = document.getElementById('btnCancelFields');
+  if(btnEdit) btnEdit.style.display = on ? 'none' : '';
+  if(btnSave) btnSave.style.display = on ? '' : 'none';
+  if(btnCanc) btnCanc.style.display = on ? '' : 'none';
+  // Para cada campo con data-fk, sustituir el contenido por un textarea (si on) o restaurar (si off)
+  document.querySelectorAll('.fw-row[data-fk]').forEach(el=>{
+    const fk = el.getAttribute('data-fk');
+    const valEl = el.querySelector('.v-content');
+    if(on){
+      const cur = fichaQualitativeCache[fk];
+      const currentVal = cur && cur.value ? cur.value : '';
+      valEl.innerHTML = `<textarea class="fw-edit-ta" data-edit-fk="${fk}" rows="3" style="width:100%;font-family:inherit;font-size:inherit;padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;box-sizing:border-box">${escapeHTML(currentVal)}</textarea>`;
+    } else {
+      // restaurar valor original
+      const cur = fichaQualitativeCache[fk];
+      if(cur && cur.value){
+        valEl.innerHTML = escapeHTML(cur.value).replace(/\n/g,'<br>');
+      } else {
+        valEl.innerHTML = '<span class="na">Pending — requires qualitative analysis</span>';
+      }
+    }
+  });
+}
+
+async function saveFichaEdits(){
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){
+    alert('You must sign in to save changes.'); return;
+  }
+  const f = currentFicha;
+  const scope = currentFichaScopeKey();
+  const tas = Array.from(document.querySelectorAll('textarea.fw-edit-ta'));
+  const changes = [];
+  tas.forEach(ta=>{
+    const fk = ta.getAttribute('data-edit-fk');
+    const newVal = ta.value.trim();
+    const cur = fichaQualitativeCache[fk];
+    const oldVal = cur && cur.value ? cur.value : '';
+    if(newVal !== oldVal) changes.push({ fk, value: newVal || null });
+  });
+  if(!changes.length){
+    toggleFichaEdit(false);
+    return;
+  }
+  const btnSave = document.getElementById('btnSaveFields');
+  if(btnSave){ btnSave.disabled = true; btnSave.textContent = 'Saving…'; }
+  let errs = 0;
+  for(const ch of changes){
+    try{
+      await window.Collab.upsertQualitative(f.name, scope, ch.fk, ch.value);
+    }catch(e){
+      console.error('save failed', ch.fk, e);
+      errs++;
+    }
+  }
+  if(btnSave){ btnSave.disabled = false; btnSave.textContent = '💾 Save all'; }
+  if(errs){
+    alert(`${errs} field(s) failed to save. See console for details.`);
+  }
+  // recargar valores y salir del modo edición
+  await loadFichaQualitative();
+  toggleFichaEdit(false);
+}
+
+async function openFieldHistoryModal(fk){
+  if(!window.Collab || !window.Collab.ready) return;
+  const f = currentFicha;
+  const scope = currentFichaScopeKey();
+  const history = await window.Collab.listFieldHistory(f.name, scope, fk).catch(()=>[]);
+  const rowMeta = currentFicha.rows.find(r=>r.fk===fk);
+  const title = rowMeta ? rowMeta.crit : fk;
+  let html = `<h3>Field history — ${escapeHTML(title)}</h3>
+  <div class="mini">Company: <b>${escapeHTML(f.name)}</b> · Scope: <b>${escapeHTML(scope)}</b></div>`;
+  if(!history.length){
+    html += '<p class="na">No changes recorded for this field yet.</p>';
+  } else {
+    html += '<div style="max-height:60vh;overflow-y:auto;margin-top:10px">';
+    history.forEach(h=>{
+      const when = fmtWhen(h.at_ts);
+      const who = escapeHTML(h.by_name || 'anonymous');
+      const before = h.before_json && h.before_json.value ? escapeHTML(h.before_json.value) : '<i class="na">—</i>';
+      const after = h.after_json && h.after_json.value ? escapeHTML(h.after_json.value) : '<i class="na">—</i>';
+      html += `<div class="panel" style="margin-bottom:8px;padding:8px 12px">
+        <div class="mini"><b>${who}</b> · ${when} · <span style="text-transform:uppercase;color:#666">${h.action}</span></div>
+        <div style="margin-top:4px"><span class="mini" style="color:#888">Before:</span> ${before}</div>
+        <div style="margin-top:4px"><span class="mini" style="color:#888">After:</span> ${after}</div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  const dlg = document.getElementById('subModal') || openSubModal(html);
+  if(document.getElementById('subModal')){ document.getElementById('subModalBody').innerHTML = html; document.getElementById('subModal').style.display='flex'; }
+}
+
+function openSubModal(innerHTML){
+  let dlg = document.getElementById('subModal');
+  if(!dlg){
+    dlg = document.createElement('div');
+    dlg.id = 'subModal';
+    dlg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    dlg.innerHTML = `<div style="background:#fff;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;border-radius:8px;padding:20px;position:relative">
+      <button onclick="document.getElementById('subModal').style.display='none'" style="position:absolute;top:8px;right:8px;background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+      <div id="subModalBody"></div>
+    </div>`;
+    document.body.appendChild(dlg);
+  }
+  document.getElementById('subModalBody').innerHTML = innerHTML;
+  dlg.style.display = 'flex';
+  return dlg;
+}
+
+async function openCompanyHistoryModal(){
+  if(!window.Collab || !window.Collab.ready) return;
+  const f = currentFicha;
+  const scope = currentFichaScopeKey();
+  const history = await window.Collab.listCompanyHistory(f.name, scope).catch(()=>[]);
+  let html = `<h3>Full history — ${escapeHTML(f.name)}</h3>
+  <div class="mini">Scope: <b>${escapeHTML(scope)}</b> · ${history.length} change(s) recorded</div>`;
+  if(!history.length){
+    html += '<p class="na">No changes recorded for this company yet.</p>';
+  } else {
+    // agrupar por field_key
+    const byField = {};
+    history.forEach(h=>{
+      const parts = (h.entity_id||'').split('|');
+      const fk = parts[2] || '(unknown)';
+      byField[fk] = byField[fk] || [];
+      byField[fk].push(h);
+    });
+    html += '<div style="max-height:70vh;overflow-y:auto;margin-top:10px">';
+    Object.keys(byField).forEach(fk=>{
+      const rowMeta = currentFicha.rows.find(r=>r.fk===fk);
+      const title = rowMeta ? rowMeta.crit : fk;
+      html += `<div class="panel" style="margin-bottom:10px;padding:10px">
+        <h4 style="margin:0 0 6px 0">${escapeHTML(title)}</h4>
+        ${byField[fk].map(h=>{
+          const when = fmtWhen(h.at_ts);
+          const who = escapeHTML(h.by_name || 'anonymous');
+          const after = h.after_json && h.after_json.value ? escapeHTML(h.after_json.value).slice(0,220) : '<i class="na">(cleared)</i>';
+          return `<div style="border-left:2px solid #ccc;padding:4px 8px;margin:4px 0"><div class="mini"><b>${who}</b> · ${when} · ${h.action}</div><div>${after}</div></div>`;
+        }).join('')}
+      </div>`;
+    });
+    html += '</div>';
+  }
+  openSubModal(html);
+}
+
+// Delegación de click para el icono ↻ (field history)
+document.addEventListener('click', function(e){
+  const btn = e.target.closest && e.target.closest('[data-hist-fk]');
+  if(btn){
+    e.preventDefault();
+    openFieldHistoryModal(btn.getAttribute('data-hist-fk'));
+  }
+});
+
 function drawCompanyCharts(f){
   if(!f||!f.rs||!f.rs.length) return;
   const rs=f.rs, byC={};

@@ -126,6 +126,49 @@
       return data || [];
     },
 
+    // -------------------------------------------------------------
+    // Qualitative — edición de campos cualitativos por (company, scope, field_key)
+    // -------------------------------------------------------------
+    async listQualitative(company, scope){
+      if(!STATE.client) return [];
+      const { data, error } = await STATE.client
+        .from('company_qualitative')
+        .select('*')
+        .eq('company', company).eq('scope', scope);
+      if(error){ console.error('[Collab] listQualitative', error); return []; }
+      return data || [];
+    },
+
+    async upsertQualitative(company, scope, field_key, value){
+      if(!STATE.client || !STATE.authorized) throw new Error('Not signed in');
+      const now = STATE.user.name;
+      const row = { company, scope, field_key, value, updated_by: now };
+      const { data, error } = await STATE.client
+        .from('company_qualitative')
+        .upsert(row, { onConflict: 'company,scope,field_key' })
+        .select().single();
+      if(error) throw error;
+      return data;
+    },
+
+    async listFieldHistory(company, scope, field_key){
+      const eid = `${company}|${scope}|${field_key}`;
+      return await this.listHistory('company_qualitative', eid);
+    },
+
+    async listCompanyHistory(company, scope){
+      if(!STATE.client) return [];
+      const prefix = `${company}|${scope}|`;
+      const { data, error } = await STATE.client
+        .from('edits_log')
+        .select('*')
+        .eq('entity','company_qualitative')
+        .like('entity_id', prefix + '%')
+        .order('at_ts', { ascending: false });
+      if(error){ console.error('[Collab] listCompanyHistory', error); return []; }
+      return data || [];
+    },
+
     onAnnouncementsChange(cb){
       if(!STATE.client) return () => {};
       const ch = STATE.client
@@ -188,7 +231,7 @@
               <h2>Hanwha DC Intelligence</h2>
               <p>Internal use only. Enter the shared password and your name to continue.</p>
               <label for="_cg_name">Your name (for edit history)</label>
-              <input id="_cg_name" type="text" autocomplete="name" placeholder="e.g. Alberto Quintana">
+              <input id="_cg_name" type="text" autocomplete="name">
               <label for="_cg_pw">Access password</label>
               <input id="_cg_pw" type="password" autocomplete="current-password">
               <div class="row"><button class="primary" id="_cg_go">Enter</button></div>
