@@ -102,7 +102,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   /* Configuración de página: A4 apaisado (mejor para gráficas y mapa) con márgenes reducidos.
      El pie con disclaimer se define en @page @bottom-center. */
   @page{
-    size: A4 landscape;
+    size: A4 portrait;
     margin: 12mm 12mm 22mm 12mm;
     @bottom-center{
       content: "INTERNAL USE ONLY · Source: BloombergNEF — Data center projects database 1.4.0 (Apr 2026, Q4 2025 data, provisional; sources: BloombergNEF, DC Byte). © Bloomberg Finance L.P. — data subject to BNEF terms; redistribution prohibited without consent. Internal reference tool: verify against primary source before external use; not investment advice. · Page " counter(page) " / " counter(pages);
@@ -135,23 +135,23 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
-    min-height: 90mm;
-    max-height: 130mm;
+    min-height: 70mm;
+    max-height: 105mm;
     page-break-inside: avoid;
     break-inside: avoid;
   }
   body.print-tab canvas{
     width: 100% !important;
     height: auto !important;
-    max-height: 130mm !important;
+    max-height: 105mm !important;
   }
-  /* El mapa (canvas ancho) usa toda la anchura pero conserva su proporción */
+  /* Mapa en vertical: usa todo el ancho, altura moderada (es apaisado por naturaleza) */
   body.print-tab #mapCanvas{
-    max-height: 160mm !important;
+    max-height: 100mm !important;
   }
   /* Cada panel y cada tabla intentan mantenerse enteros en su página */
   body.print-tab .panel, body.print-tab table{ page-break-inside: avoid; break-inside: avoid; }
-  body.print-tab .stats-grid{ display:block !important; }
+  body.print-tab .stats-grid{ display:grid !important; grid-template-columns:1fr; gap:6mm; }
   body.print-tab .stats-grid > *{ margin-bottom: 8mm; }
   /* Ajustes tipográficos para papel */
   body.print-tab { font-size: 10pt; }
