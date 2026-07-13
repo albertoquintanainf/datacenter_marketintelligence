@@ -106,6 +106,15 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 /* La cabecera de impresión solo debe aparecer al generar el PDF, nunca en
    pantalla (en pantalla el logo sale roto porque su src se rellena al imprimir). */
 #printHeader{ display:none; }
+/* --- Ficha: pestañas internas --- */
+.fTabBar{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 16px;border-bottom:1px solid var(--line,#e5ded5)}
+.fTabBtn{appearance:none;background:none;border:none;border-bottom:2px solid transparent;padding:8px 14px;margin-bottom:-1px;font:inherit;font-size:13px;font-weight:600;color:var(--dim,#6b6257);cursor:pointer;border-radius:5px 5px 0 0}
+.fTabBtn:hover{background:#f5f1ec;color:#333}
+.fTabBtn.active{color:var(--accent,#f47220);border-bottom-color:var(--accent,#f47220)}
+.fTab-hidden{display:none}
+.ficha-print-all .fTab-hidden{display:block}
+.fTabPrintTitle{display:none}
+
 @media print{
   /* Configuración de página: A4 apaisado (mejor para gráficas y mapa) con márgenes reducidos.
      El pie con disclaimer se define en @page @bottom-center. */
@@ -127,6 +136,29 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-sheet .modal{position:absolute;inset:0;padding:0;background:#fff;overflow:visible}
   body.print-sheet .sheet{box-shadow:none;border:none;max-width:100%}
   body.print-sheet .sheet .close, body.print-sheet .toolbar{display:none}
+
+  /* --- MODO 3: imprimir la ficha de empresa con pestañas (flujo normal → pagina bien) --- */
+  body.print-ficha header, body.print-ficha nav, body.print-ficha footer,
+  body.print-ficha main, body.print-ficha .filters, body.print-ficha #mapTip{ display:none !important; }
+  body.print-ficha .modal{ position:static !important; inset:auto !important; display:block !important; background:#fff; padding:0; overflow:visible; }
+  body.print-ficha .sheet{ box-shadow:none !important; border:none !important; max-width:100% !important; padding:0 !important; }
+  body.print-ficha .sheet .close, body.print-ficha .toolbar, body.print-ficha .fTabBar{ display:none !important; }
+  body.print-ficha .fTab-hidden{ display:block !important; }
+  body.print-ficha .fTabPrintTitle{
+    display:block !important;
+    font:600 13pt "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+    color:#111; margin:0 0 5mm; padding-bottom:2mm;
+    border-bottom:2px solid #f47220; letter-spacing:.02em;
+  }
+  body.print-ficha .fTab[data-ftab="stats"],
+  body.print-ficha .fTab[data-ftab="anuncios"]{ break-before:page; page-break-before:always; }
+  body.print-ficha .fTab .panel, body.print-ficha .fw-cat{ break-inside:avoid; }
+  body.print-ficha .fTab table, body.print-ficha .fTab .chartbox{ break-inside:avoid; }
+  body.print-ficha #printHeader{
+    display:flex !important; position:static !important; visibility:visible !important;
+    top:auto; left:auto; right:auto; margin-bottom:6mm;
+  }
+  body.print-ficha #printHeader *{ visibility:visible !important; }
 
   /* --- MODO 2: imprimir la pestaña activa (dashboard completo) --- */
   body.print-tab header, body.print-tab nav, body.print-tab footer,
@@ -191,20 +223,24 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-tab .panel table,
   body.print-sheet .sheet div[style*="max-height"],
   body.print-sheet .sheet div[style*="overflow"],
-  body.print-sheet .sheet table{
+  body.print-sheet .sheet table,
+  body.print-ficha .sheet div[style*="max-height"],
+  body.print-ficha .sheet div[style*="overflow"],
+  body.print-ficha .sheet table{
     max-height:none !important;
     overflow:visible !important;
     overflow-x:visible !important;
     overflow-y:visible !important;
   }
   /* Filas de tabla no cortadas entre páginas */
-  body.print-tab tr, body.print-sheet tr{ page-break-inside:avoid; break-inside:avoid; }
-  body.print-tab thead, body.print-sheet thead{ display:table-header-group; }
+  body.print-tab tr, body.print-sheet tr, body.print-ficha tr{ page-break-inside:avoid; break-inside:avoid; }
+  body.print-tab thead, body.print-sheet thead, body.print-ficha thead{ display:table-header-group; }
 
   /* Gráficas y canvas: ancho de página, alto legible; evitar que se corten */
   body.print-tab .chartbox,
   body.print-tab .chartbox.tall,
-  body.print-tab .chartbox.xtall{
+  body.print-tab .chartbox.xtall,
+  body.print-ficha .chartbox{
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
@@ -213,7 +249,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     page-break-inside: avoid;
     break-inside: avoid;
   }
-  body.print-tab canvas{
+  body.print-tab canvas, body.print-ficha canvas{
     width: 100% !important;
     height: auto !important;
     max-height: 105mm !important;
@@ -223,13 +259,14 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     max-height: 100mm !important;
   }
   /* Cada panel y cada tabla intentan mantenerse enteros en su página */
-  body.print-tab .panel, body.print-tab table{ page-break-inside: avoid; break-inside: avoid; }
-  body.print-tab .stats-grid{ display:grid !important; grid-template-columns:1fr; gap:6mm; }
-  body.print-tab .stats-grid > *{ margin-bottom: 8mm; }
+  body.print-tab .panel, body.print-tab table,
+  body.print-ficha .panel, body.print-ficha table{ page-break-inside: avoid; break-inside: avoid; }
+  body.print-tab .stats-grid, body.print-ficha .stats-grid{ display:grid !important; grid-template-columns:1fr; gap:6mm; }
+  body.print-tab .stats-grid > *, body.print-ficha .stats-grid > *{ margin-bottom: 8mm; }
   /* Ajustes tipográficos para papel */
-  body.print-tab { font-size: 10pt; }
-  body.print-tab h3 { font-size: 11pt; margin: 6mm 0 3mm; }
-  body.print-tab table { font-size: 9pt; }
+  body.print-tab, body.print-ficha { font-size: 10pt; }
+  body.print-tab h3, body.print-ficha h3 { font-size: 11pt; margin: 6mm 0 3mm; }
+  body.print-tab table, body.print-ficha table { font-size: 9pt; }
   /* KPIs en fila comprimida */
   body.print-tab .kpis{ page-break-inside: avoid; }
 }
@@ -258,17 +295,17 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 </header>
 <div id="errBanner" style="display:none;background:#c0392b;color:#fff;padding:10px 28px;font-family:monospace;font-size:12px"></div>
 <nav>
-  <button class="on" data-tab="search">01 · Search & profiles</button>
-  <button data-tab="stats">02 · Statistics</button>
-  <button data-tab="ramp">03 · Ramp-ups</button>
-  <button data-tab="map">04 · Investment map</button>
-  <button data-tab="ann">05 · Announcements</button>
-  <button data-tab="companies">06 · Company profiles</button>
+  <button class="on" data-tab="companies">01 · Company profiles</button>
+  <button data-tab="search">02 · DC Database</button>
+  <button data-tab="stats">03 · Statistics</button>
+  <button data-tab="ramp">04 · Ramp-ups</button>
+  <button data-tab="map">05 · Investment map</button>
+  <button data-tab="ann">06 · Announcements</button>
 </nav>
 <main>
 
 <!-- ================= TAB 1: SEARCH ================= -->
-<section id="tab-search">
+<section id="tab-search" style="display:none">
   <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <div class="filters">
     <div><label>Company</label><input type="text" id="fCompany" list="companyList" placeholder="All — type to search"><datalist id="companyList"></datalist></div>
@@ -491,7 +528,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 </section>
 
 <!-- ================= TAB 6: COMPANY PROFILES ================= -->
-<section id="tab-companies" style="display:none">
+<section id="tab-companies">
   <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <p class="note"><b>Company profiles directory.</b> Every operator in the BNEF database. Profiles <b>touched by the team</b> (dashboard announcements added/edited by a user) are listed <b>first</b>, most recently touched at the top; the rest follow ordered by live capacity. Click any row to open its full profile.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
@@ -592,8 +629,8 @@ window.printCurrentTab = function(){
   var activeTab = 'Dashboard';
   var activeSection = null;
   try{
-    var tabs = {'tab-search':'01 · Search & Profiles','tab-stats':'02 · Statistics',
-                'tab-ramp':'03 · Ramp-ups','tab-map':'04 · Investment Map','tab-ann':'05 · Announcements'};
+    var tabs = {'tab-companies':'01 · Company profiles','tab-search':'02 · DC Database','tab-stats':'03 · Statistics',
+                'tab-ramp':'04 · Ramp-ups','tab-map':'05 · Investment Map','tab-ann':'06 · Announcements'};
     for(var id in tabs){
       var s = document.getElementById(id);
       if(s && s.style.display !== 'none'){ activeTab = tabs[id]; activeSection = s; break; }
@@ -642,9 +679,24 @@ window.printSheet = function(){
     var view = dcSanitize(isCompanyFicha ? (currentFicha.market || 'Global') : 'Global');
     dcSetPrintTitle(dcStamp()+'_DC_'+company+'_'+view);
   }catch(_){}
-  document.body.classList.add('print-sheet');
-  setTimeout(function(){ window.print(); }, 150);
-  setTimeout(function(){ document.body.classList.remove('print-sheet'); dcRestoreTitle(); }, 1500);
+  // Ficha de empresa: modo de impresión propio (flujo normal, pagina bien),
+  // revela las 3 pestañas y dibuja TODAS las gráficas antes de imprimir.
+  var _sheet = els('sheet');
+  var _fichaPrint = !!(_sheet && _sheet.querySelector('.fTab'));
+  if(_fichaPrint){
+    document.body.classList.add('print-ficha');
+    _sheet.classList.add('ficha-print-all');
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ try{ drawCompanyCharts(currentFicha); }catch(_){} }); });
+  } else {
+    document.body.classList.add('print-sheet');
+  }
+  setTimeout(function(){ window.print(); }, _fichaPrint ? 600 : 150);
+  setTimeout(function(){
+    document.body.classList.remove('print-sheet');
+    document.body.classList.remove('print-ficha');
+    if(_sheet){ _sheet.classList.remove('ficha-print-all'); }
+    dcRestoreTitle();
+  }, 1800);
 };
 
 function uniq(col){ const s=new Set(); R.forEach(r=>{const v=r[C[col]]; if(v)s.add(v);}); return [...s].sort(); }
@@ -824,7 +876,7 @@ function renderSearchKpis(){
 
 /* ---------- fichas ---------- */
 function openModal(html){ els('sheet').innerHTML='<button class="close" onclick="closeModal()">CERRAR ✕</button>'+html; els('modal').classList.add('open'); }
-function closeModal(){ els('modal').classList.remove('open'); if(window._fichaChart){try{window._fichaChart.destroy();}catch(_){ } window._fichaChart=null;} delete chartBoxes['fichaChart']; ['coChartCountry','coChartSub','coChartCap','coChartCat'].forEach(id=>{ if(charts[id]){try{charts[id].destroy();}catch(_){ } delete charts[id];} delete chartBoxes[id]; }); }
+function closeModal(){ els('modal').classList.remove('open'); if(window._fichaChart){try{window._fichaChart.destroy();}catch(_){ } window._fichaChart=null;} delete chartBoxes['fichaChart']; ['coChartCountry','coChartSub','coChartCap','coChartCat','coChartAnn'].forEach(id=>{ if(charts[id]){try{charts[id].destroy();}catch(_){ } delete charts[id];} delete chartBoxes[id]; }); }
 els('modal').addEventListener('click',e=>{ if(e.target.id==='modal') closeModal(); });
 
 function fwRow(c,v,fk){
@@ -943,6 +995,14 @@ function openCompany(name, scopeStr){
   renderCompanyModal();
 }
 window.changeFichaScope = sel=>openCompany(currentFicha.name, sel.value);
+window.fichaTab = function(name, btn){
+  const sheet = els('sheet'); if(!sheet) return;
+  sheet.querySelectorAll('.fTab').forEach(d=>d.classList.toggle('fTab-hidden', d.getAttribute('data-ftab')!==name));
+  sheet.querySelectorAll('.fTabBtn').forEach(b=>b.classList.toggle('active', b.getAttribute('data-ftab')===name));
+  // Dibujar las gráficas de la pestaña ahora que es visible (canvas ya con tamaño)
+  if(name==='stats') requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ drawCompanyBNEFCharts(currentFicha); }catch(_){} }));
+  else if(name==='anuncios') requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ drawCompanyAnnViz(currentFicha); }catch(_){} }));
+};
 
 function renderCompanyModal(){
   const f=currentFicha;
@@ -977,24 +1037,43 @@ function renderCompanyModal(){
       <button class="btn" id="btnCompanyHistory" onclick="openCompanyHistoryModal()">📜 Full history</button>
     </span>
   </div>
-  <div class="mini" style="margin-bottom:14px">Manual searches:
-    <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+strategy+MW+investment">DC strategy</a>
-    <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+PPA+renewable+energy+data+center">energy / PPAs</a>
-    <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+investor+relations+annual+report">annual report / IR</a>
-    <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+construction+announcement">recent announcements</a>
+  <div class="fTabBar">
+    <button type="button" class="fTabBtn active" data-ftab="perfil" onclick="fichaTab('perfil',this)">Perfil y comentarios</button>
+    <button type="button" class="fTabBtn" data-ftab="stats" onclick="fichaTab('stats',this)">Estadísticas y gráficos</button>
+    <button type="button" class="fTabBtn" data-ftab="anuncios" onclick="fichaTab('anuncios',this)">Anuncios</button>
   </div>
-  ${body}
-  ${companyStatsHTML(f)}
-  <div class="panel" style="margin-top:6px"><h3>${f.name} facilities${f.market?' in '+f.market:''} (top 30 by live MW)</h3>
-    <div style="overflow-x:auto;max-height:280px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Country</th><th class="num">Live</th><th class="num">Constr.</th><th class="num" title="BNEF Pipeline">BNEF Pipe</th><th>First live</th></tr></thead>
-    <tbody>${f.rs.slice().sort((a,b)=>(b[C.live]||0)-(a[C.live]||0)).slice(0,30).map(r=>`<tr onclick='openDCByIdx(${R.indexOf(r)})'><td>${r[C.name]}</td><td>${r[C.market]||''}</td><td class="num">${fmt(r[C.live])}</td><td class="num">${fmt(r[C.uc])}</td><td class="num">${fmt(r[C.pipeline])}</td><td>${r[C.firstlive]||'—'}</td></tr>`).join('')}</tbody></table></div>
+
+  <div class="fTab" data-ftab="perfil">
+    <div class="fTabPrintTitle">1 · Perfil y comentarios</div>
+    <div class="mini" style="margin-bottom:14px">Manual searches:
+      <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+strategy+MW+investment">DC strategy</a>
+      <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+PPA+renewable+energy+data+center">energy / PPAs</a>
+      <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+investor+relations+annual+report">annual report / IR</a>
+      <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+construction+announcement">recent announcements</a>
+    </div>
+    ${body}
   </div>
-  <div class="panel" id="fichaAnnouncements" style="margin-top:6px">
-    <h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> Prospective announcements for ${escapeHTML(f.name)}</h3>
-    <div id="fichaAnnBody" style="font-size:12px;color:var(--dim);padding:6px 0">Loading…</div>
+
+  <div class="fTab fTab-hidden" data-ftab="stats">
+    <div class="fTabPrintTitle">2 · Estadísticas y gráficos</div>
+    ${companyStatsHTML(f)}
+    <div class="panel" style="margin-top:6px"><h3>${f.name} facilities${f.market?' in '+f.market:''} (top 30 by live MW)</h3>
+      <div style="overflow-x:auto;max-height:280px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Country</th><th class="num">Live</th><th class="num">Constr.</th><th class="num" title="BNEF Pipeline">BNEF Pipe</th><th>First live</th></tr></thead>
+      <tbody>${f.rs.slice().sort((a,b)=>(b[C.live]||0)-(a[C.live]||0)).slice(0,30).map(r=>`<tr onclick='openDCByIdx(${R.indexOf(r)})'><td>${r[C.name]}</td><td>${r[C.market]||''}</td><td class="num">${fmt(r[C.live])}</td><td class="num">${fmt(r[C.uc])}</td><td class="num">${fmt(r[C.pipeline])}</td><td>${r[C.firstlive]||'—'}</td></tr>`).join('')}</tbody></table></div>
+    </div>
+  </div>
+
+  <div class="fTab fTab-hidden" data-ftab="anuncios">
+    <div class="fTabPrintTitle">3 · Anuncios</div>
+    ${companyAnnPanelHTML(f)}
+    <div class="panel" id="fichaAnnouncements" style="margin-top:6px">
+      <h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> Prospective announcements for ${escapeHTML(f.name)}</h3>
+      <div id="fichaAnnBody" style="font-size:12px;color:var(--dim);padding:6px 0">Loading…</div>
+    </div>
   </div>`;
   openModal(html);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>drawCompanyCharts(f)));
+  // Las gráficas se dibujan al abrir su pestaña (fichaTab) o al imprimir (printSheet),
+  // para evitar canvas de tamaño 0×0 en pestañas ocultas.
   // Carga async de campos cualitativos (no bloquea el render)
   loadFichaQualitative();
   // Carga async de anuncios de dashboard
@@ -1303,6 +1382,10 @@ document.addEventListener('click', function(e){
 });
 
 function drawCompanyCharts(f){
+  drawCompanyBNEFCharts(f);
+  try{ drawCompanyAnnViz(f); }catch(_){}
+}
+function drawCompanyBNEFCharts(f){
   if(!f||!f.rs||!f.rs.length) return;
   const rs=f.rs, byC={};
   rs.forEach(r=>{const k=r[C.market]||'—'; byC[k]=byC[k]||{live:0,uc:0,pipe:0}; byC[k].live+=r[C.live]||0; byC[k].uc+=r[C.uc]||0; byC[k].pipe+=r[C.pipeline]||0;});
@@ -1321,7 +1404,6 @@ function drawCompanyCharts(f){
   const cat={}; rs.forEach(r=>{const k=r[C.category]; if(k)cat[k]=(cat[k]||0)+(r[C.live]||0);});
   const catE=Object.entries(cat).sort((a,b)=>b[1]-a[1]);
   try{ bar('coChartCat',catE.map(x=>x[0]),catE.map(x=>Math.round(x[1])),'#c85512',false); }catch(_){}
-  try{ drawCompanyAnnViz(f); }catch(_){}
 }
 
 /* ============================================================
@@ -1463,19 +1545,6 @@ function companyStatsHTML(f){
       <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Facility category (live MW)</h4><div class="chartbox" style="height:300px"><canvas id="coChartCat"></canvas></div></div>
     </div>
   </div>
-  <div class="panel" style="margin-top:14px" id="coAnnPanel"><h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> ${f.name} — announced investment by country${f.market?' · '+f.market+' view':''}</h3>
-    <p class="mini" style="color:var(--dim);margin:2px 0 10px">Forward-looking investment announcements tracked in the dashboard, shown as announced capex (€bn) by country. Separate prospective layer — do <b>not</b> add to BNEF live/pipeline capacity.</p>
-    <div id="coAnnEmpty" style="display:none;padding:10px;color:var(--dim);font-size:12px">No dashboard announcements for ${escapeHTML(f.name)} yet${f.market?' in '+escapeHTML(f.market):''}.</div>
-    <div id="coAnnWrap" class="stats-grid">
-      <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Announced capex (US$bn) by country</h4><div class="chartbox" style="height:280px"><canvas id="coChartAnn"></canvas></div></div>
-      <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Map — announced capex by country</h4>
-        <div style="position:relative"><canvas id="coAnnMap" style="width:100%;display:block;border:1px solid var(--line,#e5ded5);border-radius:4px;background:#f0ece7"></canvas>
-          <div id="coAnnMapTip" style="display:none;position:absolute;pointer-events:none;background:#fff;border:1px solid #cfc7bd;border-radius:4px;padding:4px 8px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5"></div>
-        </div>
-        <div id="coAnnMapLegend" class="mini" style="margin-top:6px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;color:var(--dim)"></div>
-      </div>
-    </div>
-  </div>
   <div class="panel" style="margin-top:14px"><h3>${f.name} — statistics${f.market?' · '+f.market+' view':''} (all database variables)</h3>
     <div class="stats-grid">
       <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Capacity & power</h4>
@@ -1499,6 +1568,23 @@ function companyStatsHTML(f){
 }
 
 function pendingRows(){ return currentFicha.rows.filter(r=>r.val==null); }
+
+function companyAnnPanelHTML(f){
+  return `
+  <div class="panel" style="margin-top:14px" id="coAnnPanel"><h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> ${f.name} — announced investment by country${f.market?' · '+f.market+' view':''}</h3>
+    <p class="mini" style="color:var(--dim);margin:2px 0 10px">Forward-looking investment announcements tracked in the dashboard, shown as announced capex (€bn) by country. Separate prospective layer — do <b>not</b> add to BNEF live/pipeline capacity.</p>
+    <div id="coAnnEmpty" style="display:none;padding:10px;color:var(--dim);font-size:12px">No dashboard announcements for ${escapeHTML(f.name)} yet${f.market?' in '+escapeHTML(f.market):''}.</div>
+    <div id="coAnnWrap" class="stats-grid">
+      <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Announced capex (€bn) by country</h4><div class="chartbox" style="height:280px"><canvas id="coChartAnn"></canvas></div></div>
+      <div><h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Map — announced capex by country</h4>
+        <div style="position:relative"><canvas id="coAnnMap" style="width:100%;display:block;border:1px solid var(--line,#e5ded5);border-radius:4px;background:#f0ece7"></canvas>
+          <div id="coAnnMapTip" style="display:none;position:absolute;pointer-events:none;background:#fff;border:1px solid #cfc7bd;border-radius:4px;padding:4px 8px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5"></div>
+        </div>
+        <div id="coAnnMapLegend" class="mini" style="margin-top:6px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;color:var(--dim)"></div>
+      </div>
+    </div>
+  </div>`;
+}
 
 function researchPromptText(){
   const f=currentFicha;
@@ -1897,6 +1983,7 @@ async function refreshAnnFromCollab(){
   if(document.getElementById('tab-map') && document.getElementById('tab-map').style.display!=='none' && typeof renderMap==='function') renderMap();
   if(document.getElementById('tab-search') && document.getElementById('tab-search').style.display!=='none' && typeof applyFilters==='function') applyFilters();
   if(document.getElementById('tab-stats') && document.getElementById('tab-stats').style.display!=='none' && typeof renderStats==='function') renderStats();
+  if(document.getElementById('tab-companies') && document.getElementById('tab-companies').style.display!=='none' && typeof renderCompanies==='function') renderCompanies();
   // si hay una ficha de empresa abierta, refrescar su viz de anuncios por país
   try{ if(typeof currentFicha!=='undefined' && currentFicha && document.getElementById('modal') && document.getElementById('modal').classList.contains('open') && document.getElementById('coAnnPanel')) drawCompanyAnnViz(currentFicha); }catch(_){}
 }
@@ -2513,7 +2600,7 @@ function openMapCountryDetail(marketName){
           '<td class="num">'+fmt(r[C.pipeline])+'</td></tr>';
       }).join('')+'</tbody></table></div></div>';
 
-    html+='<div class="toolbar"><button class="btn" data-mapdrill-search="'+escapeHTML(marketName)+'">→ Open in Search tab (copies filters)</button></div>';
+    html+='<div class="toolbar"><button class="btn" data-mapdrill-search="'+escapeHTML(marketName)+'">→ Open in DC Database (copies filters)</button></div>';
   }
   openModal(html);
 }
@@ -2565,7 +2652,7 @@ function applyMapFiltersToSearch(marketName){
   if(ct){
     // Aviso claro: Search no tiene filtro de tipo, así que va a mostrar más de lo que el mapa mostraba.
     setTimeout(function(){
-      alert('Note: the Search tab does not have a "Company type" filter. Results will include ALL companies in '+marketName+', not only '+
+      alert('Note: the DC Database tab does not have a "Company type" filter. Results will include ALL companies in '+marketName+', not only '+
         (ct==='hyper'?'hyperscalers':ct==='neo'?'neoclouds':'colos')+
         '. Use the map drill-down modal for filter-consistent view.');
     }, 100);
@@ -2767,7 +2854,7 @@ document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()
   if(b.dataset.tab==='companies') requestAnimationFrame(()=>renderCompanies());
 }));
 
-renderTable(); renderSearchKpis();
+renderTable(); renderSearchKpis(); renderCompanies();
 </script>
 <script>if(typeof window.__DATA==='undefined'){document.addEventListener('DOMContentLoaded',function(){document.body.innerHTML='<div style="font-family:sans-serif;padding:40px"><h2>No se cargaron los datos</h2><p>Falta <b>data.js</b>.</p></div>';});}</script></body>
 </html>
