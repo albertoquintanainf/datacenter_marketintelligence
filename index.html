@@ -467,7 +467,11 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 5: ANNOUNCEMENTS ================= -->
 <section id="tab-ann" style="display:none">
-  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
+  <div class="tab-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <button class="btn primary" id="annAddBtn" disabled onclick="openAnnEditor()">+ Add announcement</button>
+    <span id="annCollabStatus" style="color:var(--dim);font-size:12px">Sign in with the shared password to add or edit announcements.</span>
+    <button class="btn" onclick="printCurrentTab()" style="margin-left:auto">🖨 Print this tab / save as PDF</button>
+  </div>
   <p class="note"><b>Prospective layer — announced investments.</b> Manually curated from verifiable sources (press releases, specialised media). This is <b>NOT</b> BNEF-verified capacity: figures are company announcements, some with multi-year horizons, and may never fully materialise. Capex normalised to US$bn (EUR→USD ≈1.16). Phases: land → grid request → permitting → announced → construction → contracted. «Platform» = multi-project investment vehicles (MW not attributable to a single country). Keep both layers separate when quoting figures.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
     <div><label>Scope</label><select id="annScope"><option value="">World</option><option value="eu">Europe only</option></select></div>
@@ -478,17 +482,14 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   <div class="kpis" id="annKpis"></div>
   <div class="panel"><h3 id="annTitle">Announced investments — world ranking</h3>
     <div style="overflow-x:auto"><table id="annTable"><thead><tr><th>#</th><th>Project</th><th>Company / promoters</th><th>Country</th><th class="num">MW (announced)</th><th class="num">Capex (US$bn)</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th><th>Added by</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+    <div id="annPager" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--dim)"></div>
   </div>
   <div class="stats-grid">
     <div class="panel"><h3>Announced capacity by country (MW, where disclosed)</h3>
       <div style="overflow-x:auto"><table id="annCountry"><thead><tr><th>Country</th><th class="num"># announcements</th><th class="num">MW announced</th><th class="num">Capex US$bn</th></tr></thead><tbody></tbody></table></div>
     </div>
-    <div class="panel"><h3>Add / manage announcements</h3>
+    <div class="panel"><h3>Sources &amp; rules</h3>
       <div style="font-size:13px;line-height:1.7">
-      <p id="annCollabStatus" style="color:var(--dim)">Sign in with the shared password to add or edit announcements.</p>
-      <div style="margin:10px 0">
-        <button class="btn primary" id="annAddBtn" disabled onclick="openAnnEditor()">+ Add announcement</button>
-      </div>
       <p style="color:var(--dim);font-size:12px">Suggested sources: grid connection requests (Red Eléctrica, RTE, TenneT, National Grid), environmental permitting, DataCenterDynamics, Data Center Knowledge. <b>Rule: no source, no entry.</b></p>
       </div>
     </div>
@@ -1770,10 +1771,31 @@ function annScoped(){
     return true;
   });
 }
+/* Paginación de la tabla de anuncios */
+const ANN_PAGE_SIZE = 25;      // filas por página (ajustable 25–30)
+let annPage = 1;
+window.annGoPage = function(p){ annPage = p; renderAnn(); };
+function renderAnnPager(total,pages,start,shown){
+  const el=els('annPager'); if(!el) return;
+  if(total<=ANN_PAGE_SIZE){ el.innerHTML=''; return; }
+  const from=total?start+1:0, to=start+shown;
+  const btn=(label,p,dis,cur)=>'<button class="btn" style="font-size:11px;padding:3px 9px'+(cur?';background:var(--accent);color:#fff':'')+'" '+(dis?'disabled':'onclick="annGoPage('+p+')"')+'>'+label+'</button>';
+  let nums=''; const win=2;
+  const lo=Math.max(1,annPage-win), hi=Math.min(pages,annPage+win);
+  if(lo>1){ nums+=btn('1',1,false,annPage===1); if(lo>2) nums+='<span style="padding:0 2px">…</span>'; }
+  for(let p=lo;p<=hi;p++) nums+=btn(String(p),p,false,p===annPage);
+  if(hi<pages){ if(hi<pages-1) nums+='<span style="padding:0 2px">…</span>'; nums+=btn(String(pages),pages,false,annPage===pages); }
+  el.innerHTML='<span>Showing '+from+'–'+to+' of '+total+' announcements</span>'+
+    '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+      btn('‹ Prev',annPage-1,annPage<=1,false)+nums+btn('Next ›',annPage+1,annPage>=pages,false)+
+    '</span>';
+}
+
 function renderAnn(){
  try{
   if(!ANN.length){
     els('annKpis').innerHTML='<div style="padding:14px;color:var(--dim)">No announcements loaded yet. Add one with the editor below.</div>';
+    { const pg=els('annPager'); if(pg) pg.innerHTML=''; }
     return;
   }
   const items=annScoped();
@@ -1798,13 +1820,21 @@ function renderAnn(){
   els('annTitle').textContent='Announced investments — '+(els('annScope')&&els('annScope').value==='eu'?'Europe':'world')+' ranking · sorted by '+(sort==='mw'?'announced MW':sort==='date'?'date':'capex');
   // ranking
   const confBadge=c=>'<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:9px;background:'+(c==='high'?'#e7f2e7':c==='medium'?'#fdf3e0':'#fdeaea')+';color:'+(c==='high'?'#1e6b34':c==='medium'?'#9a6b00':'#a33')+'">'+c.toUpperCase()+'</span>';
-  els('annTable').querySelector('tbody').innerHTML=sorted.map((a,i)=>
+  // --- paginación: recortar a la página actual ---
+  const total=sorted.length;
+  const pages=Math.max(1,Math.ceil(total/ANN_PAGE_SIZE));
+  if(annPage>pages) annPage=pages;
+  if(annPage<1) annPage=1;
+  const start=(annPage-1)*ANN_PAGE_SIZE;
+  const pageRows=sorted.slice(start,start+ANN_PAGE_SIZE);
+  els('annTable').querySelector('tbody').innerHTML=pageRows.map((a,j)=>{ const i=start+j; return
     '<tr><td>'+(i+1)+'</td><td><b>'+a.project+'</b>'+(a.notes?'<div style="font-size:11px;color:var(--dim);max-width:340px">'+a.notes+'</div>':'')+'</td>'+
     '<td>'+a.company+'</td><td>'+a.country+'</td>'+
     '<td class="num">'+(a.mw?fmt(a.mw,0):'—')+'</td>'+
     '<td class="num">'+(a.capex_usd_bn?('$'+fmt(a.capex_usd_bn,1)):'—')+'</td>'+
     '<td>'+a.phase+'</td><td>'+confBadge(a.confidence)+'</td><td>'+a.date+'</td>'+
-    '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td>'+'<td style="font-size:11px;color:'+(a._created_by==='seed@import'?'var(--dim)':'#333')+'">'+(a._created_by==='seed@import'?'—':(a._updated_by&&a._updated_by!==a._created_by?(a._created_by+' · edited by '+a._updated_by):a._created_by))+'</td>'+(window.Collab&&window.Collab.isAuthorized()&&a.id&&a._created_by!=='seed@import'?('<td><button class="btn" style="font-size:11px;padding:2px 6px" onclick="openAnnEditor(\''+a.id+'\')">Edit</button> <button class="btn" style="font-size:11px;padding:2px 6px" onclick="deleteAnn(\''+a.id+'\')">Del</button></td>'):(window.Collab&&window.Collab.isAuthorized()?'<td style="color:var(--dim);font-size:11px">seed</td>':'<td></td>'))+'</tr>').join('');
+    '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td>'+'<td style="font-size:11px;color:'+(a._created_by==='seed@import'?'var(--dim)':'#333')+'">'+(a._created_by==='seed@import'?'—':(a._updated_by&&a._updated_by!==a._created_by?(a._created_by+' · edited by '+a._updated_by):a._created_by))+'</td>'+(window.Collab&&window.Collab.isAuthorized()&&a.id&&a._created_by!=='seed@import'?('<td><button class="btn" style="font-size:11px;padding:2px 6px" onclick="openAnnEditor(\''+a.id+'\')">Edit</button> <button class="btn" style="font-size:11px;padding:2px 6px" onclick="deleteAnn(\''+a.id+'\')">Del</button></td>'):(window.Collab&&window.Collab.isAuthorized()?'<td style="color:var(--dim);font-size:11px">seed</td>':'<td></td>'))+'</tr>'; }).join('');
+  renderAnnPager(total,pages,start,pageRows.length);
   // por país (excluye platforms sin país)
   const byC={};
   items.forEach(a=>{ if(a.phase==='platform'||!a.iso3) return;
@@ -1818,7 +1848,7 @@ function renderAnn(){
 (function(){
   const ph=els('annPhase');
   if(ph && ANN.length){ [...new Set(ANN.map(a=>a.phase))].sort().forEach(p=>ph.append(new Option(p,p))); }
-  ['annScope','annPhase','annConf','annSort'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('change',()=>renderAnn());});
+  ['annScope','annPhase','annConf','annSort'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('change',()=>{annPage=1;renderAnn();});});
 
 /* ---------- Modal editor de anuncios ---------- */
 function openAnnEditor(id){
