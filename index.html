@@ -80,6 +80,8 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .fw-row .v{color:var(--txt)}
 .fw-row .v .na{color:#9aa7b6;font-style:italic}
 .chartbox{position:relative;height:300px}
+.tab-actions{display:flex;justify-content:flex-end;margin:0 0 10px 0}
+.tab-actions .btn{font-size:12px}
 .chartbox.tall{height:380px}
 .chartbox.xtall{height:520px}
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -97,11 +99,66 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 .rlist .it:hover,.rlist .it.sel{background:#e7f2f3}
 .rlist .it .m{font-family:var(--mono);color:var(--amber);font-size:11px}
 @media print{
-  body *{visibility:hidden}
-  .modal,.modal *{visibility:visible}
-  .modal{position:absolute;inset:0;padding:0;background:#fff;overflow:visible}
-  .sheet{box-shadow:none;border:none;max-width:100%}
-  .sheet .close,.toolbar{display:none}
+  /* Configuración de página: A4 apaisado (mejor para gráficas y mapa) con márgenes reducidos.
+     El pie con disclaimer se define en @page @bottom-center. */
+  @page{
+    size: A4 landscape;
+    margin: 12mm 12mm 22mm 12mm;
+    @bottom-center{
+      content: "INTERNAL USE ONLY · Source: BloombergNEF — Data center projects database 1.4.0 (Apr 2026, Q4 2025 data, provisional; sources: BloombergNEF, DC Byte). © Bloomberg Finance L.P. — data subject to BNEF terms; redistribution prohibited without consent. Internal reference tool: verify against primary source before external use; not investment advice. · Page " counter(page) " / " counter(pages);
+      font: 8pt "IBM Plex Mono", Consolas, monospace;
+      color: #666;
+    }
+  }
+  /* Nada de scroll ni sombras al imprimir */
+  html, body { background: #fff !important; }
+
+  /* --- MODO 1: imprimir una ficha (modal abierto) --- */
+  body.print-sheet *{visibility:hidden}
+  body.print-sheet .modal, body.print-sheet .modal *{visibility:visible}
+  body.print-sheet .modal{position:absolute;inset:0;padding:0;background:#fff;overflow:visible}
+  body.print-sheet .sheet{box-shadow:none;border:none;max-width:100%}
+  body.print-sheet .sheet .close, body.print-sheet .toolbar{display:none}
+
+  /* --- MODO 2: imprimir la pestaña activa (dashboard completo) --- */
+  body.print-tab header, body.print-tab nav, body.print-tab footer,
+  body.print-tab .modal, body.print-tab .filters button,
+  body.print-tab #mapTip { display:none !important; }
+  body.print-tab section[style*="display:none"]{ display:none !important; }
+  body.print-tab section{ display:block !important; }
+  body.print-tab main{ padding:0; }
+
+  /* Gráficas y canvas: ancho de página, alto legible; evitar que se corten */
+  body.print-tab .chartbox,
+  body.print-tab .chartbox.tall,
+  body.print-tab .chartbox.xtall{
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 90mm;
+    max-height: 130mm;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  body.print-tab canvas{
+    width: 100% !important;
+    height: auto !important;
+    max-height: 130mm !important;
+  }
+  /* El mapa (canvas ancho) usa toda la anchura pero conserva su proporción */
+  body.print-tab #mapCanvas{
+    max-height: 160mm !important;
+  }
+  /* Cada panel y cada tabla intentan mantenerse enteros en su página */
+  body.print-tab .panel, body.print-tab table{ page-break-inside: avoid; break-inside: avoid; }
+  body.print-tab .stats-grid{ display:block !important; }
+  body.print-tab .stats-grid > *{ margin-bottom: 8mm; }
+  /* Ajustes tipográficos para papel */
+  body.print-tab { font-size: 10pt; }
+  body.print-tab h3 { font-size: 11pt; margin: 6mm 0 3mm; }
+  body.print-tab table { font-size: 9pt; }
+  /* KPIs en fila comprimida */
+  body.print-tab .kpis{ page-break-inside: avoid; }
 }
 </style>
 </head>
@@ -122,6 +179,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 1: SEARCH ================= -->
 <section id="tab-search">
+  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <div class="filters">
     <div><label>Company</label><input type="text" id="fCompany" list="companyList" placeholder="All — type to search"><datalist id="companyList"></datalist></div>
     <div><label>Continent / Region</label><select id="fRegion"><option value="">All</option></select></div>
@@ -150,6 +208,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 2: STATS ================= -->
 <section id="tab-stats" style="display:none">
+  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <p class="note">Statistics combine the search-tab filters (01) with the local filters below. «Live» capacity = operational IT capacity; lower than total contracted power.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
     <div><label>Region (local)</label><select id="sRegion"><option value="">All</option></select></div>
@@ -195,6 +254,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 3: RAMP-UPS ================= -->
 <section id="tab-ramp" style="display:none">
+  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <p class="note">A «ramp-up» is a facility whose live capacity increases in ≥ 2 steps across the quarterly series (successive phases of the same asset, identified by name and coordinates). «Campus clusters» group distinct facilities within a ~1 km radius (matching rounded coordinates), typically phases or buildings of the same campus.</p>
   <div class="kpis" id="rampKpis"></div>
   <div class="two">
@@ -215,6 +275,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 4: MAP ================= -->
 <section id="tab-map" style="display:none">
+  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <p class="note">Choropleth by country, shaded by the chosen metric. Combines the search-tab filters (01) with the map filters below (company, facility type, status, size). Any variable — live, construction, pipeline, future — can be mapped. Hover a country for its breakdown; click to drill into the search tab. Colour scale is per-quantile so smaller markets stay legible despite the US dominating absolute totals.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
     <div><label>Metric shown</label><select id="mapMetric">
@@ -266,6 +327,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 5: ANNOUNCEMENTS ================= -->
 <section id="tab-ann" style="display:none">
+  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <p class="note"><b>Prospective layer — announced investments.</b> Manually curated from verifiable sources (press releases, specialised media). This is <b>NOT</b> BNEF-verified capacity: figures are company announcements, some with multi-year horizons, and may never fully materialise. Capex normalised to US$bn (EUR→USD ≈1.16). Phases: land → grid request → permitting → announced → construction → contracted. «Platform» = multi-project investment vehicles (MW not attributable to a single country). Keep both layers separate when quoting figures.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
     <div><label>Scope</label><select id="annScope"><option value="">World</option><option value="eu">Europe only</option></select></div>
@@ -300,7 +362,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 </footer>
 
 <script src="data.js"></script>
-<script src="anuncios.js" onerror="console.warn('anuncios.js not found — announcements layer disabled')"></script>
+<script src="anuncios.js" onerror="console.warn('anuncios.js not found')"></script>
 <script>
 window.addEventListener('error',e=>{
   const ms=document.getElementById('mapStatus');
@@ -325,6 +387,34 @@ Chart.defaults.color=DIM; Chart.defaults.borderColor=GRID; Chart.defaults.font.f
 
 /* ---------- filters ---------- */
 const els = id=>document.getElementById(id);
+/* --- IMPRESIÓN / PDF ------------------------------------------- */
+window.printCurrentTab = function(){
+  var tip=document.getElementById('mapTip'); if(tip) tip.style.display='none';
+  document.body.classList.add('print-tab');
+  setTimeout(function(){
+    try{
+      if(window.Chart && Chart.instances){
+        var list = (typeof Chart.instances === 'object') ? Object.values(Chart.instances) : [];
+        list.forEach(function(c){ try{ c.resize(); }catch(_){ } });
+      }
+      if(typeof renderMap==='function' && document.getElementById('tab-map').style.display!=='none') renderMap();
+    }catch(_){ }
+    window.print();
+  }, 250);
+  setTimeout(function(){
+    document.body.classList.remove('print-tab');
+    if(window.Chart && Chart.instances){
+      Object.values(Chart.instances).forEach(function(c){ try{ c.resize(); }catch(_){ } });
+    }
+    if(typeof renderMap==='function' && document.getElementById('tab-map').style.display!=='none') renderMap();
+  }, 1500);
+};
+window.printSheet = function(){
+  document.body.classList.add('print-sheet');
+  setTimeout(function(){ window.print(); }, 150);
+  setTimeout(function(){ document.body.classList.remove('print-sheet'); }, 1500);
+};
+
 function uniq(col){ const s=new Set(); R.forEach(r=>{const v=r[C[col]]; if(v)s.add(v);}); return [...s].sort(); }
 uniq('region').forEach(v=>els('fRegion').append(new Option(v,v)));
 uniq('market').forEach(v=>els('fMarket').append(new Option(v,v)));
@@ -594,7 +684,7 @@ function renderCompanyModal(){
     <select style="width:auto" onchange="changeFichaScope(this)">${scopeOpts}</select>
     <button class="btn primary" onclick="downloadFichaXLSX()">⬇ Download profile (Excel)</button>
     <button class="btn" onclick="copyResearchPrompt()">📋 Copy research prompt</button>
-    <button class="btn" onclick="window.print()">🖨 Print / PDF</button>
+    <button class="btn" onclick="printSheet()">🖨 Print / PDF</button>
   </div>
   <div class="mini" style="margin-bottom:14px">Manual searches:
     <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+strategy+MW+investment">DC strategy</a>
@@ -856,7 +946,7 @@ function openDC(r){
   const html=`
   <h2>${r[C.name]||'—'} <span class="mini">· ${r[C.company]||''}</span></h2>
   <div class="sub">${r[C.market]||''}${r[C.usstate]?' · '+r[C.usstate]:''} · ${r[C.region]||''} · ${r[C.lat]!=null?r[C.lat]+', '+r[C.lon]:''}</div>
-  <div class="toolbar"><button class="btn" onclick="window.print()">🖨 Print / save PDF</button></div>
+  <div class="toolbar"><button class="btn" onclick="printSheet()">🖨 Print / save PDF</button></div>
   <div class="fw-cat"><h4>Facility profile</h4>
     ${fwRow('Status · category', `${r[C.status]||'—'} · ${r[C.category]||'—'}${r[C.subcategory]?' / '+r[C.subcategory]:''}`)}
     ${fwRow('Capacity', `Headline ${fmt(r[C.headline])} MW · Live ${fmt(r[C.live])} MW · Under construction ${fmt(r[C.uc])} MW · Other pipeline ${fmt(r[C.pipeline])} MW`)}
