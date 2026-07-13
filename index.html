@@ -103,6 +103,9 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 .rlist .it{padding:8px 10px;border-bottom:1px solid #edf0f4;cursor:pointer;font-size:12.5px}
 .rlist .it:hover,.rlist .it.sel{background:#e7f2f3}
 .rlist .it .m{font-family:var(--mono);color:var(--amber);font-size:11px}
+/* La cabecera de impresión solo debe aparecer al generar el PDF, nunca en
+   pantalla (en pantalla el logo sale roto porque su src se rellena al imprimir). */
+#printHeader{ display:none; }
 @media print{
   /* Configuración de página: A4 apaisado (mejor para gráficas y mapa) con márgenes reducidos.
      El pie con disclaimer se define en @page @bottom-center. */
@@ -156,6 +159,11 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
      inferior pero sin contenido. */
   body.print-sheet #printHeader,
   body.print-sheet #printHeader *{ visibility:visible !important; }
+  /* FIX: la cabecera de la ficha es position:absolute (para poder colocarse
+     encima del modal, que ocupa toda la página). Sin reservar espacio, pisaba
+     el contenido de la ficha. Empujamos el contenido hacia abajo la altura de
+     la cabecera (~24mm de logo + su margen) para que empiece por debajo. */
+  body.print-sheet .sheet{ padding-top:30mm !important; }
   #printHeader img{ height:16mm; width:auto; }
   #printHeader .ph-meta{
     text-align:right;
