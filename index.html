@@ -132,8 +132,12 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-tab header, body.print-tab nav, body.print-tab footer,
   body.print-tab .modal, body.print-tab .filters button,
   body.print-tab #mapTip { display:none !important; }
-  body.print-tab section[style*="display:none"]{ display:none !important; }
-  body.print-tab section{ display:block !important; }
+  /* FIX impresión por pestaña: ocultar TODAS las secciones y mostrar solo la
+     marcada explícitamente con .print-active (el método anterior dependía de
+     un match de string en el style inline, que fallaba porque el navegador
+     serializa "display: none" con espacio y hacía que se imprimieran todas). */
+  body.print-tab section{ display:none !important; }
+  body.print-tab section.print-active{ display:block !important; }
   body.print-tab main{ padding:0; }
 
   /* --- Header de impresión (logo + "Generado por") --- */
@@ -568,19 +572,33 @@ function populatePrintHeader(tabLabel){
   }catch(e){ console.warn('populatePrintHeader failed:', e); }
 }
 
+/* Nombre automático de guardado del PDF (el navegador usa document.title
+   como nombre por defecto en "Guardar como PDF"). Formato: AAMMDD_DC_... */
+function dcStamp(){ var d=new Date(); return String(d.getFullYear()).slice(-2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
+function dcSanitize(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'') || 'NA'; }
+var _dcPrevTitle = null;
+function dcSetPrintTitle(name){ _dcPrevTitle = document.title; document.title = name; }
+function dcRestoreTitle(){ if(_dcPrevTitle!=null){ document.title = _dcPrevTitle; _dcPrevTitle=null; } }
+
 window.printCurrentTab = function(){
   var tip=document.getElementById('mapTip'); if(tip) tip.style.display='none';
   // Determinar qué pestaña está activa para etiqueta del header
   var activeTab = 'Dashboard';
+  var activeSection = null;
   try{
     var tabs = {'tab-search':'01 · Search & Profiles','tab-stats':'02 · Statistics',
                 'tab-ramp':'03 · Ramp-ups','tab-map':'04 · Investment Map','tab-ann':'05 · Announcements'};
     for(var id in tabs){
       var s = document.getElementById(id);
-      if(s && s.style.display !== 'none'){ activeTab = tabs[id]; break; }
+      if(s && s.style.display !== 'none'){ activeTab = tabs[id]; activeSection = s; break; }
     }
   }catch(_){}
+  // marcar SOLO la sección activa para impresión (evita que se impriman todas)
+  try{ document.querySelectorAll('section.print-active').forEach(function(el){ el.classList.remove('print-active'); }); }catch(_){}
+  if(activeSection) activeSection.classList.add('print-active');
   populatePrintHeader(activeTab);
+  // nombre automático: AAMMDD_DC_<TabName>
+  try{ dcSetPrintTitle(dcStamp()+'_DC_'+dcSanitize(activeTab.split('·').pop())); }catch(_){}
   document.body.classList.add('print-tab');
   setTimeout(function(){
     try{
@@ -594,6 +612,8 @@ window.printCurrentTab = function(){
   }, 250);
   setTimeout(function(){
     document.body.classList.remove('print-tab');
+    if(activeSection) activeSection.classList.remove('print-active');
+    dcRestoreTitle();
     if(window.Chart && Chart.instances){
       Object.values(Chart.instances).forEach(function(c){ try{ c.resize(); }catch(_){ } });
     }
@@ -608,9 +628,17 @@ window.printSheet = function(){
     if(h2) sheetLabel = (h2.textContent||'').split('·')[0].trim();
   }catch(_){}
   populatePrintHeader(sheetLabel);
+  // nombre automático: AAMMDD_DC_<Company>_<View>
+  try{
+    var h2txt = (document.querySelector('#sheet h2')||{}).textContent || '';
+    var isCompanyFicha = (typeof currentFicha!=='undefined') && currentFicha && h2txt.indexOf(currentFicha.name)===0;
+    var company = dcSanitize(isCompanyFicha ? currentFicha.name : sheetLabel);
+    var view = dcSanitize(isCompanyFicha ? (currentFicha.market || 'Global') : 'Global');
+    dcSetPrintTitle(dcStamp()+'_DC_'+company+'_'+view);
+  }catch(_){}
   document.body.classList.add('print-sheet');
   setTimeout(function(){ window.print(); }, 150);
-  setTimeout(function(){ document.body.classList.remove('print-sheet'); }, 1500);
+  setTimeout(function(){ document.body.classList.remove('print-sheet'); dcRestoreTitle(); }, 1500);
 };
 
 function uniq(col){ const s=new Set(); R.forEach(r=>{const v=r[C[col]]; if(v)s.add(v);}); return [...s].sort(); }
@@ -1924,7 +1952,10 @@ function renderAnn(){
   ]);
   els('annTitle').textContent='Announced investments — '+(els('annScope')&&els('annScope').value==='eu'?'Europe':'world')+' ranking · sorted by '+(sort==='mw'?'announced MW':sort==='date'?'date':'capex');
   // ranking
-  const confBadge=c=>'<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:9px;background:'+(c==='high'?'#e7f2e7':c==='medium'?'#fdf3e0':'#fdeaea')+';color:'+(c==='high'?'#1e6b34':c==='medium'?'#9a6b00':'#a33')+'">'+c.toUpperCase()+'</span>';
+  const confBadge=c=>{ const cc=(c||'').toString().toLowerCase(); const lbl=cc?cc.toUpperCase():'—';
+    const bg=cc==='high'?'#e7f2e7':cc==='medium'?'#fdf3e0':cc==='low'?'#fdeaea':'#eee';
+    const fg=cc==='high'?'#1e6b34':cc==='medium'?'#9a6b00':cc==='low'?'#a33':'#777';
+    return '<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:9px;background:'+bg+';color:'+fg+'">'+lbl+'</span>'; };
   // --- paginación: recortar a la página actual ---
   const total=sorted.length;
   const pages=Math.max(1,Math.ceil(total/ANN_PAGE_SIZE));
@@ -1932,13 +1963,14 @@ function renderAnn(){
   if(annPage<1) annPage=1;
   const start=(annPage-1)*ANN_PAGE_SIZE;
   const pageRows=sorted.slice(start,start+ANN_PAGE_SIZE);
-  els('annTable').querySelector('tbody').innerHTML=pageRows.map((a,j)=>{ const i=start+j; return
+  els('annTable').querySelector('tbody').innerHTML=pageRows.map((a,j)=>{ const i=start+j; try{ return
     '<tr><td>'+(i+1)+'</td><td><b>'+a.project+'</b>'+(a.notes?'<div style="font-size:11px;color:var(--dim);max-width:340px">'+a.notes+'</div>':'')+'</td>'+
     '<td>'+a.company+'</td><td>'+a.country+'</td>'+
     '<td class="num">'+(a.mw?fmt(a.mw,0):'—')+'</td>'+
     '<td class="num">'+(a.capex_usd_bn?('$'+fmt(a.capex_usd_bn,1)):'—')+'</td>'+
     '<td>'+a.phase+'</td><td>'+confBadge(a.confidence)+'</td><td>'+a.date+'</td>'+
-    '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td>'+'<td style="font-size:11px;color:'+(a._created_by==='seed@import'?'var(--dim)':'#333')+'">'+(a._created_by==='seed@import'?'—':(a._updated_by&&a._updated_by!==a._created_by?(a._created_by+' · edited by '+a._updated_by):a._created_by))+'</td>'+(window.Collab&&window.Collab.isAuthorized()&&a.id&&a._created_by!=='seed@import'?('<td><button class="btn" style="font-size:11px;padding:2px 6px" onclick="openAnnEditor(\''+a.id+'\')">Edit</button> <button class="btn" style="font-size:11px;padding:2px 6px" onclick="deleteAnn(\''+a.id+'\')">Del</button></td>'):(window.Collab&&window.Collab.isAuthorized()?'<td style="color:var(--dim);font-size:11px">seed</td>':'<td></td>'))+'</tr>'; }).join('');
+    '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td>'+'<td style="font-size:11px;color:'+(a._created_by==='seed@import'?'var(--dim)':'#333')+'">'+(a._created_by==='seed@import'?'—':(a._updated_by&&a._updated_by!==a._created_by?(a._created_by+' · edited by '+a._updated_by):a._created_by))+'</td>'+(window.Collab&&window.Collab.isAuthorized()&&a.id&&a._created_by!=='seed@import'?('<td><button class="btn" style="font-size:11px;padding:2px 6px" onclick="openAnnEditor(\''+a.id+'\')">Edit</button> <button class="btn" style="font-size:11px;padding:2px 6px" onclick="deleteAnn(\''+a.id+'\')">Del</button></td>'):(window.Collab&&window.Collab.isAuthorized()?'<td style="color:var(--dim);font-size:11px">seed</td>':'<td></td>'))+'</tr>';
+     }catch(err){ console.warn('ann row render failed',err,a); return '<tr><td>'+(i+1)+'</td><td>'+((a&&a.project)||'?')+'</td><td colspan="10" style="color:#c0392b;font-size:11px">Row render error — revisa los campos de este anuncio</td></tr>'; } }).join('');
   renderAnnPager(total,pages,start,pageRows.length);
   // por país (excluye platforms sin país)
   const byC={};
