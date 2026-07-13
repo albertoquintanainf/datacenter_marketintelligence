@@ -263,6 +263,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   <button data-tab="ramp">03 · Ramp-ups</button>
   <button data-tab="map">04 · Investment map</button>
   <button data-tab="ann">05 · Announcements</button>
+  <button data-tab="companies">06 · Company profiles</button>
 </nav>
 <main>
 
@@ -486,6 +487,22 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
       <p style="color:var(--dim);font-size:12px">Suggested sources: grid connection requests (Red Eléctrica, RTE, TenneT, National Grid), environmental permitting, DataCenterDynamics, Data Center Knowledge. <b>Rule: no source, no entry.</b></p>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ================= TAB 6: COMPANY PROFILES ================= -->
+<section id="tab-companies" style="display:none">
+  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
+  <p class="note"><b>Company profiles directory.</b> Every operator in the BNEF database. Profiles <b>touched by the team</b> (dashboard announcements added/edited by a user) are listed <b>first</b>, most recently touched at the top; the rest follow ordered by live capacity. Click any row to open its full profile.</p>
+  <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <div><label>Search company</label><input id="coSearch" placeholder="e.g. Microsoft, Equinix…"></div>
+    <div><label>Region</label><select id="coRegion"><option value="">All regions</option></select></div>
+    <div><label>Sort</label><select id="coSort"><option value="modified">Team-edited first</option><option value="live">Live MW</option><option value="name">Name (A–Z)</option><option value="dc"># data centers</option></select></div>
+  </div>
+  <div class="kpis" id="coKpis"></div>
+  <div class="panel"><h3 id="coProfTitle">Company profiles</h3>
+    <div style="overflow-x:auto"><table id="coProfTable"><thead><tr><th>#</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr.</th><th class="num">BNEF Pipeline</th><th>Top countries</th><th>Team activity</th></tr></thead><tbody></tbody></table></div>
+    <div id="coProfPager" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--dim)"></div>
   </div>
 </section>
 
@@ -787,6 +804,7 @@ function renderSearchAnn(){
 }
 function escapeHTML(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s){ return escapeHTML(s); }
+function capFirst(s){ s=String(s==null?'':s); return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
 // listener del checkbox
 document.addEventListener('DOMContentLoaded',()=>{
   const cb=document.getElementById('searchAnnShow');
@@ -1896,6 +1914,8 @@ function annScoped(){
 /* Paginación de la tabla de anuncios */
 const ANN_PAGE_SIZE = 25;      // filas por página (ajustable 25–30)
 let annPage = 1;
+const CO_PAGE_SIZE = 30;       // company profiles por página
+let coPage = 1;
 window.annGoPage = function(p){ annPage = p; renderAnn(); };
 function renderAnnPager(total,pages,start,shown){
   const el=els('annPager'); if(!el) return;
@@ -1957,7 +1977,7 @@ function renderAnn(){
     '<td>'+a.company+'</td><td>'+a.country+'</td>'+
     '<td class="num">'+(a.mw?fmt(a.mw,0):'—')+'</td>'+
     '<td class="num">'+(a.capex_usd_bn?('$'+fmt(a.capex_usd_bn,1)):'—')+'</td>'+
-    '<td>'+a.phase+'</td><td>'+confBadge(a.confidence)+'</td><td>'+a.date+'</td>'+
+    '<td>'+capFirst(a.phase)+'</td><td>'+confBadge(a.confidence)+'</td><td>'+a.date+'</td>'+
     '<td><a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--accent)">'+a.source+'</a></td>'+'<td style="font-size:11px;color:'+(a._created_by==='seed@import'?'var(--dim)':'#333')+'">'+(a._created_by==='seed@import'?'—':(a._updated_by&&a._updated_by!==a._created_by?(a._created_by+' · edited by '+a._updated_by):a._created_by))+'</td>'+(window.Collab&&window.Collab.isAuthorized()&&a.id&&a._created_by!=='seed@import'?('<td><button class="btn" style="font-size:11px;padding:2px 6px" onclick="openAnnEditor(\''+a.id+'\')">Edit</button> <button class="btn" style="font-size:11px;padding:2px 6px" onclick="deleteAnn(\''+a.id+'\')">Del</button></td>'):(window.Collab&&window.Collab.isAuthorized()?'<td style="color:var(--dim);font-size:11px">seed</td>':'<td></td>'))+'</tr>'
      );
      }catch(err){ console.warn('ann row render failed',err,a); return '<tr><td>'+(i+1)+'</td><td>'+((a&&a.project)||'?')+'</td><td colspan="10" style="color:#c0392b;font-size:11px">Row render error — revisa los campos de este anuncio</td></tr>'; } }).join('');
@@ -1982,6 +2002,14 @@ function openAnnEditor(id){
   const isEdit = !!id;
   const a = isEdit ? ANN.find(x=>x.id===id) : {phase:'announced',confidence:'medium',europe:false,region:'EMEA'};
   if(isEdit && !a){ alert('Announcement not found'); return; }
+  // País -> ISO3 -> región desde MAPX, para desplegable e ISO3 automático
+  const _mapx = (window.__MAPX||{}), _match = _mapx.match||{}, _agg = _mapx.agg||{};
+  const _euSet = (typeof EUROPE_ISO!=='undefined') ? EUROPE_ISO : new Set(['AND','AUT','BEL','BGR','HRV','CYP','CZE','DNK','EST','FIN','FRA','DEU','GRC','HUN','ISL','IRL','ITA','LVA','LTU','LUX','MLT','MCO','NLD','NOR','POL','PRT','ROU','SRB','SVK','ESP','SWE','CHE','GBR','UKR']);
+  const _countryNames = Object.keys(_match).sort((x,y)=>x.localeCompare(y));
+  if(a.country && _countryNames.indexOf(a.country)<0) _countryNames.unshift(a.country); // conservar valor antiguo al editar
+  const _countryOpts = ['<option value="">— Select country —</option>']
+    .concat(_countryNames.map(n=>`<option value="${String(n).replace(/"/g,'&quot;')}"${a.country===n?' selected':''}>${escapeHTML(n)}</option>`))
+    .join('');
   const modal = document.createElement('div');
   modal.className='modal';
   modal.style.display='flex';
@@ -1992,13 +2020,14 @@ function openAnnEditor(id){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;font-size:13px">
         <label style="grid-column:1/-1">Project *<input id="_ann_project" value="${(a.project||'').replace(/"/g,'&quot;')}" required></label>
         <label style="grid-column:1/-1">Company / promoters *<input id="_ann_company" value="${(a.company||'').replace(/"/g,'&quot;')}" required></label>
-        <label>Country *<input id="_ann_country" value="${(a.country||'').replace(/"/g,'&quot;')}" required></label>
-        <label>ISO3 (3 letters)<input id="_ann_iso3" maxlength="3" value="${a.iso3||''}"></label>
+        <label style="grid-column:1/-1">Country *<select id="_ann_country" required>${_countryOpts}</select>
+          <span style="color:var(--dim);font-size:11px">ISO3 set automatically: <b id="_ann_iso3_show">${a.iso3||'—'}</b></span></label>
+        <input type="hidden" id="_ann_iso3" value="${a.iso3||''}">
         <label>Region<select id="_ann_region"><option value="EMEA"${a.region==='EMEA'?' selected':''}>EMEA</option><option value="AMER"${a.region==='AMER'?' selected':''}>AMER</option><option value="APAC"${a.region==='APAC'?' selected':''}>APAC</option></select></label>
         <label>Europe<select id="_ann_europe"><option value="false"${!a.europe?' selected':''}>No</option><option value="true"${a.europe?' selected':''}>Yes</option></select></label>
         <label>MW announced<input id="_ann_mw" type="number" step="1" value="${a.mw??''}"></label>
         <label>Capex US$bn<input id="_ann_capex" type="number" step="0.1" value="${a.capex_usd_bn??''}"></label>
-        <label>Phase *<select id="_ann_phase">${['land','grid','permitting','announced','construction','contracted','platform'].map(p=>`<option value="${p}"${a.phase===p?' selected':''}>${p}</option>`).join('')}</select></label>
+        <label>Phase *<select id="_ann_phase">${['land','grid','permitting','announced','construction','contracted','platform'].map(p=>`<option value="${p}"${a.phase===p?' selected':''}>${capFirst(p)}</option>`).join('')}</select></label>
         <label>Confidence *<select id="_ann_confidence">${['high','medium','low'].map(c=>`<option value="${c}"${a.confidence===c?' selected':''}>${c}</option>`).join('')}</select></label>
         <label style="grid-column:1/-1">Date (YYYY-MM)<input id="_ann_date" placeholder="2026-07" value="${a.date||''}"></label>
         <label style="grid-column:1/-1">Source *<input id="_ann_source" value="${(a.source||'').replace(/"/g,'&quot;')}" required></label>
@@ -2012,6 +2041,21 @@ function openAnnEditor(id){
       <div id="_ann_err" style="color:#c0392b;margin-top:8px;font-size:12px"></div>
     </div>`;
   document.body.appendChild(modal);
+  // Auto-relleno: al elegir país, fijar ISO3 (oculto), región y Europa
+  (function(){
+    const cy=document.getElementById('_ann_country'), iso=document.getElementById('_ann_iso3'),
+          isoShow=document.getElementById('_ann_iso3_show'), reg=document.getElementById('_ann_region'),
+          eu=document.getElementById('_ann_europe');
+    if(!cy) return;
+    cy.addEventListener('change', ()=>{
+      const nm=cy.value;
+      const code = _match[nm] || (a.country===nm ? (a.iso3||'') : '') || '';
+      if(iso) iso.value = code;
+      if(isoShow) isoShow.textContent = code || '—';
+      if(code && _agg[code] && reg && _agg[code].region) reg.value = _agg[code].region;
+      if(eu) eu.value = (code && _euSet.has(code)) ? 'true' : 'false';
+    });
+  })();
   document.getElementById('_ann_save').onclick = async () => {
     const g = k => document.getElementById('_ann_'+k).value.trim();
     const errBox = document.getElementById('_ann_err'); errBox.textContent='';
@@ -2586,14 +2630,134 @@ function renderHyperCompare(){
   container.innerHTML=html;
 }
 
+/* ---------- Company profiles tab ---------- */
+window.coGoPage = function(p){ coPage = p; renderCompanies(); };
+function renderCompaniesPager(total, pages){
+  const el = els('coProfPager'); if(!el) return;
+  if(total <= CO_PAGE_SIZE){ el.innerHTML=''; return; }
+  const from=(coPage-1)*CO_PAGE_SIZE+1, to=Math.min(coPage*CO_PAGE_SIZE,total);
+  el.innerHTML =
+    '<span>Showing '+from+'–'+to+' of '+total.toLocaleString('en-US')+' companies</span>'+
+    '<span style="display:flex;gap:6px;align-items:center">'+
+      '<button class="btn" '+(coPage<=1?'disabled':'')+' onclick="coGoPage('+(coPage-1)+')">‹ Prev</button>'+
+      '<span>Page '+coPage+' / '+pages+'</span>'+
+      '<button class="btn" '+(coPage>=pages?'disabled':'')+' onclick="coGoPage('+(coPage+1)+')">Next ›</button>'+
+    '</span>';
+}
+function renderCompanies(){
+ try{
+  // poblar filtro de región una vez
+  (function(){ const sel=els('coRegion'); if(sel && sel.options.length<=1){
+    const regs=[...new Set(R.map(r=>r[C.region]).filter(Boolean))].sort();
+    regs.forEach(g=>sel.append(new Option(g,g)));
+  } })();
+
+  const q=(els('coSearch')?.value||'').trim().toLowerCase();
+  const re=els('coRegion')?els('coRegion').value:'';
+  const sortMode=els('coSort')?els('coSort').value:'modified';
+
+  // agregar empresas desde la base BNEF
+  const map={};
+  R.forEach(r=>{ const co=r[C.company]; if(!co) return;
+    const m=map[co]||(map[co]={co:co,dc:0,live:0,uc:0,pipe:0,regions:{},countries:{}});
+    m.dc++; m.live+=r[C.live]||0; m.uc+=r[C.uc]||0; m.pipe+=r[C.pipeline]||0;
+    const g=r[C.region]; if(g) m.regions[g]=(m.regions[g]||0)+1;
+    const k=r[C.market]; if(k) m.countries[k]=(m.countries[k]||0)+(r[C.live]||0);
+  });
+
+  // actividad del equipo (contribuciones de usuarios en anuncios)
+  const IMPORTS=new Set(['seed@import','research@import']);
+  const act={};
+  (typeof ANN!=='undefined'?ANN:[]).forEach(x=>{ const co=x.company; if(!co) return;
+    const a=act[co]||(act[co]={anns:0,userEdits:0,lastBy:null,lastAt:null});
+    a.anns++;
+    const who=x._updated_by||x._created_by;
+    if(who && !IMPORTS.has(who)){ a.userEdits++;
+      const t=x._updated_at||x.date||'';
+      if(!a.lastAt || String(t)>String(a.lastAt)){ a.lastAt=t; a.lastBy=who; }
+    }
+  });
+
+  let rows=Object.keys(map).map(co=>{
+    const m=map[co];
+    const rEnt=Object.keys(m.regions).map(k=>[k,m.regions[k]]).sort((a,b)=>b[1]-a[1]);
+    m.region = rEnt.length?rEnt[0][0]:'';
+    m.topCountries = Object.keys(m.countries).map(k=>[k,m.countries[k]]).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]);
+    const a=act[co]||{};
+    m.anns=a.anns||0; m.userEdits=a.userEdits||0; m.lastBy=a.lastBy||null; m.lastAt=a.lastAt||null;
+    return m;
+  });
+
+  if(q) rows=rows.filter(r=>r.co.toLowerCase().includes(q));
+  if(re) rows=rows.filter(r=>r.region===re);
+
+  const byLive=(a,b)=>b.live-a.live;
+  if(sortMode==='name') rows.sort((a,b)=>a.co.localeCompare(b.co));
+  else if(sortMode==='dc') rows.sort((a,b)=>b.dc-a.dc);
+  else if(sortMode==='live') rows.sort(byLive);
+  else { // team-edited first -> announced -> live
+    rows.sort((a,b)=>{
+      const au=a.userEdits>0?1:0, bu=b.userEdits>0?1:0;
+      if(au!==bu) return bu-au;
+      if(au && bu){ const c=String(b.lastAt||'').localeCompare(String(a.lastAt||'')); if(c) return c; }
+      const aa=a.anns>0?1:0, ba=b.anns>0?1:0;
+      if(aa!==ba) return ba-aa;
+      return byLive(a,b);
+    });
+  }
+
+  const totCo=rows.length;
+  const edited=rows.filter(r=>r.userEdits>0).length;
+  const withAnn=rows.filter(r=>r.anns>0).length;
+  els('coKpis').innerHTML=kpiHTML([
+    [totCo.toLocaleString('en-US'),'Companies'],
+    [edited,'Profiles edited by the team'],
+    [withAnn,'Companies with announcements']
+  ]);
+  { const t=els('coProfTitle'); if(t) t.textContent='Company profiles'+(sortMode==='modified'?' · team-edited first':''); }
+
+  const total=rows.length, pages=Math.max(1,Math.ceil(total/CO_PAGE_SIZE));
+  if(coPage>pages) coPage=pages; if(coPage<1) coPage=1;
+  const start=(coPage-1)*CO_PAGE_SIZE, pageRows=rows.slice(start,start+CO_PAGE_SIZE);
+
+  els('coProfTable').querySelector('tbody').innerHTML = pageRows.map((r,j)=>{ const i=start+j; try{ return (
+    '<tr class="co-row" data-company="'+escapeAttr(r.co)+'" style="cursor:pointer">'+
+    '<td>'+(i+1)+'</td>'+
+    '<td><b>'+escapeHTML(r.co)+'</b>'+(r.region?'<div style="font-size:11px;color:var(--dim)">'+escapeHTML(r.region)+'</div>':'')+'</td>'+
+    '<td class="num">'+r.dc+'</td>'+
+    '<td class="num">'+fmt(r.live)+'</td>'+
+    '<td class="num">'+fmt(r.uc)+'</td>'+
+    '<td class="num">'+fmt(r.pipe)+'</td>'+
+    '<td style="font-size:12px">'+(r.topCountries.length?escapeHTML(r.topCountries.join(', ')):'—')+'</td>'+
+    '<td style="font-size:11px">'+ (r.userEdits>0
+        ? '<span style="color:#1e6b34">✎ '+escapeHTML(r.lastBy||'user')+(r.lastAt?' · '+escapeHTML(String(r.lastAt).slice(0,10)):'')+'</span>'
+        : (r.anns>0 ? (r.anns+' announcement'+(r.anns>1?'s':'')) : '<span style="color:var(--dim)">—</span>')) +'</td>'+
+    '</tr>'
+    ); }catch(err){ return '<tr><td>'+(i+1)+'</td><td>'+escapeHTML((r&&r.co)||'?')+'</td><td colspan="6" style="color:#c0392b;font-size:11px">Row error</td></tr>'; } }).join('')
+    || '<tr><td colspan="8" style="text-align:center;color:var(--dim);padding:14px">No companies match the current filters.</td></tr>';
+
+  // abrir ficha al hacer clic en la fila
+  els('coProfTable').querySelectorAll('.co-row').forEach(tr=>{ tr.onclick=()=>openCompany(tr.getAttribute('data-company')); });
+
+  renderCompaniesPager(total, pages);
+ }catch(e){ const k=els('coKpis'); if(k) k.innerHTML='<div style="padding:14px;color:#c0392b">Error rendering companies: '+escapeHTML(e.message||String(e))+'</div>'; }
+}
+(function(){ // filtros: al cambiar, volver a página 1
+  ['coSearch','coRegion','coSort'].forEach(id=>{ const el=els(id); if(!el) return;
+    const ev = id==='coSearch' ? 'input' : 'change';
+    el.addEventListener(ev, ()=>{ coPage=1; renderCompanies(); });
+  });
+})();
+
 /* ---------- tabs: redibujar gráficas al activar (fix canvas oculto = tamaño 0) ---------- */
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav button').forEach(o=>o.classList.remove('on')); b.classList.add('on');
-  ['search','stats','ramp','map','ann'].forEach(t=>{ var el=els('tab-'+t); if(el) el.style.display = t===b.dataset.tab?'':'none'; });
+  ['search','stats','ramp','map','ann','companies'].forEach(t=>{ var el=els('tab-'+t); if(el) el.style.display = t===b.dataset.tab?'':'none'; });
   if(b.dataset.tab==='stats') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderStats(); renderStatsAnn(); renderHyperCompare();}));
   if(b.dataset.tab==='ramp') requestAnimationFrame(()=>renderRamp());
   if(b.dataset.tab==='map') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderMap();}));
   if(b.dataset.tab==='ann') requestAnimationFrame(()=>renderAnn());
+  if(b.dataset.tab==='companies') requestAnimationFrame(()=>renderCompanies());
 }));
 
 renderTable(); renderSearchKpis();
