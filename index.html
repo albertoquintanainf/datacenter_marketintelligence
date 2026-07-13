@@ -149,6 +149,13 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-sheet #printHeader{
     position:absolute; top:8mm; left:12mm; right:12mm; z-index:9999;
   }
+  /* FIX: en modo ficha (print-sheet) el resto de elementos se ocultan con
+     `visibility:hidden`. La regla de arriba solo hace visible el contenedor
+     #printHeader, pero no sus hijos (logo, título, usuario, fecha). Sin esta
+     regla la cabecera de las fichas salía como una caja vacía con la línea
+     inferior pero sin contenido. */
+  body.print-sheet #printHeader,
+  body.print-sheet #printHeader *{ visibility:visible !important; }
   #printHeader img{ height:16mm; width:auto; }
   #printHeader .ph-meta{
     text-align:right;
