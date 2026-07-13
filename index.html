@@ -110,7 +110,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     size: A4 portrait;
     margin: 12mm 12mm 22mm 12mm;
     @bottom-center{
-      content: "INTERNAL USE ONLY · Source: BloombergNEF — Data center projects database 1.4.0 (Apr 2026, Q4 2025 data, provisional; sources: BloombergNEF, DC Byte). © Bloomberg Finance L.P. — data subject to BNEF terms; redistribution prohibited without consent. Internal reference tool: verify against primary source before external use; not investment advice. · Page " counter(page) " / " counter(pages);
+      content: "INTERNAL USE ONLY · Source: BloombergNEF — Data center projects database (sources: BloombergNEF, DC Byte). Internal reference tool: verify against primary source before external use; not investment advice. · Page " counter(page) " / " counter(pages);
       font: 8pt "IBM Plex Mono", Consolas, monospace;
       color: #666;
     }
@@ -208,7 +208,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
       <thead><tr>
         <th data-s="company">Company</th><th data-s="name">Data center</th><th data-s="market">Country</th><th data-s="region">Region</th>
         <th data-s="subcategory">Segment</th><th class="num" data-s="headline">Headline MW</th><th class="num" data-s="live">Live MW</th>
-        <th class="num" data-s="uc">En constr. MW</th><th class="num" data-s="pipeline">Pipeline MW</th><th data-s="firstlive">First live</th>
+        <th class="num" data-s="uc">En constr. MW</th><th class="num" data-s="pipeline" title="BNEF Pipeline: verified by BNEF, not yet under construction">BNEF Pipeline MW</th><th data-s="firstlive">First live</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -271,13 +271,49 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     </div>
   </div>
   <div class="panel" style="margin-top:14px"><h3>Country × company — top 20 combinations by live MW</h3>
-    <div style="overflow-x:auto"><table id="crossTable"><thead><tr><th>Country</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Constr. MW</th><th class="num">Pipeline MW</th><th class="num">Land (ha)</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="crossTable"><thead><tr><th>Country</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Constr. MW</th><th class="num" title="BNEF Pipeline">BNEF Pipeline MW</th><th class="num">Land (ha)</th></tr></thead><tbody></tbody></table></div>
   </div>
 
   <div class="panel" id="statsAnnPanel" style="margin-top:14px">
     <h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> Prospective layer — summary (kept separate from BNEF above)</h3>
     <div class="kpis" id="statsAnnKpis"></div>
     <p style="color:var(--dim);font-size:11px;margin:6px 0 0">Full ranking and per-country breakdown in tab 05. Never summed with the BNEF verified metrics.</p>
+  </div>
+
+  <!-- Panel: comparativa hyperscalers por país (matriz color por empresa) — antes en tab Map -->
+  <div class="panel" style="margin-top:14px">
+    <h3>Hyperscaler footprint by country · live MW</h3>
+    <p style="font-size:12px;color:var(--dim);margin-bottom:8px">Each row is a hyperscaler with its brand color; each column is a country (top 15 by hyperscaler live capacity). Empty cells = no BNEF-recorded capacity for that combination. This view ignores the map filters — always shows all hyperscalers.</p>
+    <div style="overflow-x:auto;max-height:520px"><table id="hyperCompareTable">
+      <thead></thead>
+      <tbody id="hyperCompareBody"></tbody>
+    </table></div>
+  </div>
+
+  <!-- Panel: nota informativa con las 3 categorías — antes en tab Map -->
+  <div class="panel" style="margin-top:14px">
+    <h3>Company type definitions</h3>
+    <p style="font-size:12px;color:var(--dim);margin-bottom:10px">These groups are defined <b>by this dashboard</b>, not by BNEF. BNEF's own taxonomy is by facility type (colocation vs self-build), not by operator type. Names must match BNEF's naming exactly to be classified — misspellings or variants are counted as "unclassified".</p>
+    <div class="stats-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div>
+        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Hyperscalers (10)</p>
+        <p style="font-size:12px;line-height:1.55">Large public cloud + consumer internet firms that operate their own DC capacity at global scale. Includes: <b>Amazon Web Services, Microsoft, Google, Meta, Oracle, Apple, Alibaba, Tencent, ByteDance, TikTok</b>.</p>
+        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Notes:</i> BNEF records 156 DCs under AWS, 77 Microsoft, 45 Google, 26 Meta. ByteDance and TikTok appear here for completeness but BNEF has no self-operated DCs recorded (they lease heavily from colos, which show under the colo owner). IBM Cloud is NOT included — it is ambiguous between hyperscaler and enterprise cloud.</p>
+      </div>
+      <div>
+        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Neocloud / GPU cloud (14)</p>
+        <p style="font-size:12px;line-height:1.55">Specialist AI/GPU-as-a-service providers. Includes: <b>CoreWeave, Lambda, Nebius, Crusoe, Vultr, Together AI, Paperspace, FluidStack, Genesis Digital Assets, Vast.ai, RunPod, Denvr Dataworks, Voltage Park, Genesis Cloud</b>.</p>
+        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Caveat:</i> BNEF underrepresents this category — many neoclouds lease from colos rather than operating branded sites, so their footprint here is a floor, not a real measure of the segment.</p>
+      </div>
+      <div>
+        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Colocation (36)</p>
+        <p style="font-size:12px;line-height:1.55">Landlord operators that build and lease DC space to third parties. Includes: <b>Equinix, Digital Realty, Vantage, CyrusOne, DATA4, NTT (all subsidiaries), Iron Mountain, Colt DCS, Global Switch, STACK, Aligned, QTS, CoreSite, EdgeConneX, Interxion, KDDI Telehouse, Digital Edge DC, PDG, Flexential, Cologix, Switch, SUNeVision iAdvantage, Quantum Switch</b> + Digital Realty JVs (Bersama, MC), NTT filials (Global DC, Comms, DATA, Docomo), CyrusOne KEP, STACK Americas, Stack Telecom.</p>
+        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Not classified but arguably colo:</i> GDS Holdings (77 DCs), DataBank (54), Ascenty (37), STT Global Data Centres India (29), NEXTDC (21), Scala (21), NorthC (25), AtlasEdge (21). These are large operators not in the list yet — flag if you want them added.</p>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--dim);margin-top:12px;border-top:1px dashed var(--line);padding-top:10px">
+      <b>Source:</b> classifications curated for this dashboard using BNEF's Company field; naming aligned with BNEF's exact strings (case-sensitive). If a company appears under a variant name in BNEF that is not on the list, it will not be classified — see the "unclassified companies" note in DEPLOY.md for how to add them.
+    </p>
   </div>
 </section>
 
@@ -309,10 +345,10 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
     <div><label>Metric shown</label><select id="mapMetric">
       <option value="live" selected>Live capacity (operational)</option>
-      <option value="fut">Future = under construction + pipeline</option>
+      <option value="fut" title="BNEF-verified projects: under construction + pipeline">Future = UC + BNEF Pipeline</option>
       <option value="uc">Under construction only</option>
-      <option value="pipe">Other pipeline only</option>
-      <option value="ann">Announced MW (prospective layer, beta)</option>
+      <option value="pipe" title="BNEF Pipeline: projects verified by BNEF with future MW, not yet under construction">BNEF Pipeline only</option>
+      <option value="ann" title="Announcements from dashboard (Colliers + seeds). Prospective layer, do NOT sum with BNEF">Announced (dashboard prospective)</option>
     </select></div>
     <div><label>View</label><select id="mapView">
       <option value="world">World</option>
@@ -343,50 +379,15 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     </div>
   </div>
   <div class="panel"><h3>Country investment table</h3>
-    <div style="overflow:auto;max-height:420px"><table id="mapCountryTable"><thead><tr><th>Country</th><th>Region</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num">Pipeline MW</th><th class="num">Future MW</th><th class="num"># DC</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow:auto;max-height:420px"><table id="mapCountryTable"><thead><tr><th>Country</th><th>Region</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num" title="BNEF Pipeline: projects verified by BNEF, not yet under construction">BNEF Pipeline MW</th><th class="num">Future MW</th><th class="num" title="Announced MW from dashboard (Colliers + seeds). Prospective, do NOT sum with BNEF">Announced MW</th><th class="num"># DC</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="stats-grid">
     <div class="panel"><h3>Top 15 countries by shown metric (MW)</h3><div class="chartbox xtall"><canvas id="mapBar"></canvas></div></div>
     <div class="panel"><h3>Regional split of shown metric (MW)</h3>
-      <div style="overflow-x:auto"><table id="mapRegTable"><thead><tr><th>Region</th><th class="num">Countries</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num">Pipeline MW</th><th class="num">Future MW</th></tr></thead><tbody></tbody></table></div>
+      <div style="overflow-x:auto"><table id="mapRegTable"><thead><tr><th>Region</th><th class="num">Countries</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num" title="BNEF-verified pipeline, not yet under construction">BNEF Pipeline MW</th><th class="num">Future MW</th><th class="num" title="Dashboard announcements — prospective, not summed with BNEF">Announced MW</th></tr></thead><tbody></tbody></table></div>
     </div>
   </div>
 
-  <!-- Panel: comparativa hyperscalers por país (matriz color por empresa) -->
-  <div class="panel" style="margin-top:14px">
-    <h3>Hyperscaler footprint by country · live MW</h3>
-    <p style="font-size:12px;color:var(--dim);margin-bottom:8px">Each row is a hyperscaler with its brand color; each column is a country (top 15 by hyperscaler live capacity). Empty cells = no BNEF-recorded capacity for that combination. This view ignores the map filters — always shows all hyperscalers.</p>
-    <div style="overflow-x:auto;max-height:520px"><table id="hyperCompareTable">
-      <thead></thead>
-      <tbody id="hyperCompareBody"></tbody>
-    </table></div>
-  </div>
-
-  <!-- Panel: nota informativa con las 3 categorías -->
-  <div class="panel" style="margin-top:14px">
-    <h3>Company type definitions</h3>
-    <p style="font-size:12px;color:var(--dim);margin-bottom:10px">These groups are defined <b>by this dashboard</b>, not by BNEF. BNEF's own taxonomy is by facility type (colocation vs self-build), not by operator type. Names must match BNEF's naming exactly to be classified — misspellings or variants are counted as "unclassified".</p>
-    <div class="stats-grid" style="grid-template-columns:1fr 1fr 1fr">
-      <div>
-        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Hyperscalers (10)</p>
-        <p style="font-size:12px;line-height:1.55">Large public cloud + consumer internet firms that operate their own DC capacity at global scale. Includes: <b>Amazon Web Services, Microsoft, Google, Meta, Oracle, Apple, Alibaba, Tencent, ByteDance, TikTok</b>.</p>
-        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Notes:</i> BNEF records 156 DCs under AWS, 77 Microsoft, 45 Google, 26 Meta. ByteDance and TikTok appear here for completeness but BNEF has no self-operated DCs recorded (they lease heavily from colos, which show under the colo owner). IBM Cloud is NOT included — it is ambiguous between hyperscaler and enterprise cloud.</p>
-      </div>
-      <div>
-        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Neocloud / GPU cloud (14)</p>
-        <p style="font-size:12px;line-height:1.55">Specialist AI/GPU-as-a-service providers. Includes: <b>CoreWeave, Lambda, Nebius, Crusoe, Vultr, Together AI, Paperspace, FluidStack, Genesis Digital Assets, Vast.ai, RunPod, Denvr Dataworks, Voltage Park, Genesis Cloud</b>.</p>
-        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Caveat:</i> BNEF underrepresents this category — many neoclouds lease from colos rather than operating branded sites, so their footprint here is a floor, not a real measure of the segment.</p>
-      </div>
-      <div>
-        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Colocation (36)</p>
-        <p style="font-size:12px;line-height:1.55">Landlord operators that build and lease DC space to third parties. Includes: <b>Equinix, Digital Realty, Vantage, CyrusOne, DATA4, NTT (all subsidiaries), Iron Mountain, Colt DCS, Global Switch, STACK, Aligned, QTS, CoreSite, EdgeConneX, Interxion, KDDI Telehouse, Digital Edge DC, PDG, Flexential, Cologix, Switch, SUNeVision iAdvantage, Quantum Switch</b> + Digital Realty JVs (Bersama, MC), NTT filials (Global DC, Comms, DATA, Docomo), CyrusOne KEP, STACK Americas, Stack Telecom.</p>
-        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Not classified but arguably colo:</i> GDS Holdings (77 DCs), DataBank (54), Ascenty (37), STT Global Data Centres India (29), NEXTDC (21), Scala (21), NorthC (25), AtlasEdge (21). These are large operators not in the list yet — flag if you want them added.</p>
-      </div>
-    </div>
-    <p style="font-size:11px;color:var(--dim);margin-top:12px;border-top:1px dashed var(--line);padding-top:10px">
-      <b>Source:</b> classifications curated for this dashboard using BNEF's Company field; naming aligned with BNEF's exact strings (case-sensitive). If a company appears under a variant name in BNEF that is not on the list, it will not be classified — see the "unclassified companies" note in DEPLOY.md for how to add them.
-    </p>
-  </div>
 </section>
 
 
@@ -426,11 +427,10 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
 
 <footer>
-  <strong>Source & disclaimer.</strong> Data: <strong>BloombergNEF — “Data center projects database”</strong> <span id="footVersion"></span> (sources: BloombergNEF and DC Byte). The latest quarter in the series may be <strong>provisional</strong>. «Live capacity» refers to operational IT capacity, lower than total contracted power. © Bloomberg Finance L.P. — data subject to BloombergNEF terms and conditions; redistribution prohibited without consent. This dashboard is an internal reference tool: figures must be verified against the primary source before use in external documents, and nothing shown here constitutes investment advice. Qualitative profile fields (energy strategy, partners, committed investment) are not in the database and require complementary analysis. «Europe», «Middle East» and «Africa» are curated market groupings defined in this dashboard (Europe = geographic Europe incl. UK, EFTA, Balkans and Ukraine; excl. Russia, Turkey and the Caucasus), since the database only distinguishes AMER / EMEA / APAC.
+  <strong>Source & disclaimer.</strong> Data: <strong>BloombergNEF — “Data center projects database”</strong> (sources: BloombergNEF and DC Byte). The latest quarter in the series may be <strong>provisional</strong>. «Live capacity» refers to operational IT capacity, lower than total contracted power. This dashboard is an internal reference tool: figures must be verified against the primary source before use in external documents, and nothing shown here constitutes investment advice. Qualitative profile fields (energy strategy, partners, committed investment) are not in the database and require complementary analysis. «Europe», «Middle East» and «Africa» are curated market groupings defined in this dashboard (Europe = geographic Europe incl. UK, EFTA, Balkans and Ukraine; excl. Russia, Turkey and the Caucasus), since the database only distinguishes AMER / EMEA / APAC.
 </footer>
 
 <script src="data.js"></script>
-<script src="anuncios.js" onerror="console.warn('anuncios.js not found')"></script>
 <script>
 window.addEventListener('error',e=>{
   const ms=document.getElementById('mapStatus');
@@ -445,7 +445,6 @@ const LABELS = window.__LABELS || {};
 const C = {}; DATA.cols.forEach((c,i)=>C[c]=i);
 const R = DATA.rows;
 document.getElementById('metaBadge').textContent = DATA.meta.dataset+' · '+DATA.meta.date+' · '+DATA.meta.n+' data centers';
-document.getElementById('footVersion').textContent = '· '+DATA.meta.dataset+' · '+DATA.meta.date;
 
 const fmt = (v,d=1)=> v==null?'—':v.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:0});
 const sizeBucket = h => h==null?null : h<5?'a':h<20?'b':h<50?'c':h<100?'d':'e';
@@ -651,7 +650,7 @@ function renderSearchKpis(){
     [filtered.length.toLocaleString('en-US'),'Data centers'],
     [fmt(sum(filtered,'live'),0)+' MW','Live capacity'],
     [fmt(sum(filtered,'uc'),0)+' MW','Under construction'],
-    [fmt(sum(filtered,'pipeline'),0)+' MW','Other pipeline'],
+    [fmt(sum(filtered,'pipeline'),0)+' MW','BNEF Pipeline'],
     [new Set(filtered.map(r=>r[C.company])).size.toLocaleString('en-US'),'Companies'],
     [new Set(filtered.map(r=>r[C.market])).size,'Countries']
   ]);
@@ -821,13 +820,110 @@ function renderCompanyModal(){
   ${body}
   ${companyStatsHTML(f)}
   <div class="panel" style="margin-top:6px"><h3>${f.name} facilities${f.market?' in '+f.market:''} (top 30 by live MW)</h3>
-    <div style="overflow-x:auto;max-height:280px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Country</th><th class="num">Live</th><th class="num">Constr.</th><th class="num">Pipeline</th><th>First live</th></tr></thead>
+    <div style="overflow-x:auto;max-height:280px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Country</th><th class="num">Live</th><th class="num">Constr.</th><th class="num" title="BNEF Pipeline">BNEF Pipe</th><th>First live</th></tr></thead>
     <tbody>${f.rs.slice().sort((a,b)=>(b[C.live]||0)-(a[C.live]||0)).slice(0,30).map(r=>`<tr onclick='openDCByIdx(${R.indexOf(r)})'><td>${r[C.name]}</td><td>${r[C.market]||''}</td><td class="num">${fmt(r[C.live])}</td><td class="num">${fmt(r[C.uc])}</td><td class="num">${fmt(r[C.pipeline])}</td><td>${r[C.firstlive]||'—'}</td></tr>`).join('')}</tbody></table></div>
+  </div>
+  <div class="panel" id="fichaAnnouncements" style="margin-top:6px">
+    <h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> Prospective announcements for ${escapeHTML(f.name)}</h3>
+    <div id="fichaAnnBody" style="font-size:12px;color:var(--dim);padding:6px 0">Loading…</div>
   </div>`;
   openModal(html);
   requestAnimationFrame(()=>requestAnimationFrame(()=>drawCompanyCharts(f)));
   // Carga async de campos cualitativos (no bloquea el render)
   loadFichaQualitative();
+  // Carga async de anuncios de dashboard
+  loadFichaAnnouncements(f.name, currentFicha.scopeStr);
+}
+
+/* ============================================================
+ * FICHA · Anuncios de dashboard filtrados por la empresa activa
+ * Respeta el scope actual (Global / Region / Country) para acotar
+ * el conjunto de anuncios mostrados.
+ * ============================================================ */
+function loadFichaAnnouncements(companyName, scopeStr){
+  const body = document.getElementById('fichaAnnBody');
+  if(!body) return;
+  const list = (typeof ANN !== 'undefined' ? ANN : []).filter(a => a.company === companyName);
+  if(!list.length){
+    body.innerHTML = '<div style="padding:8px;color:var(--dim)">No dashboard announcements for this company yet.</div>';
+    return;
+  }
+  // Aplicar scope (respeta la Perspective activa de la ficha)
+  const sc = parseScope(scopeStr || '');
+  let scoped = list;
+  if(sc && sc.kind === 'C'){
+    // Country scope: coincidir por market o country
+    scoped = list.filter(a => a.country === sc.val || (a.market && a.market === sc.val));
+  } else if(sc && sc.kind === 'R'){
+    scoped = list.filter(a => a.region === sc.val);
+  } else if(sc && sc.kind === 'G' && sc.val === 'Europe'){
+    scoped = list.filter(a => a.europe === true);
+  }
+  // Los "Global" y otros muestran todo.
+
+  if(!scoped.length){
+    body.innerHTML = '<div style="padding:8px;color:var(--dim)">No announcements match the current perspective. Switch to Global to see all '+list.length+' announcements for this company.</div>';
+    return;
+  }
+
+  // Agrupar por país
+  const byCountry = {};
+  scoped.forEach(a => {
+    const k = a.country || '—';
+    if(!byCountry[k]) byCountry[k] = [];
+    byCountry[k].push(a);
+  });
+  const countries = Object.keys(byCountry).sort((a,b) =>
+    byCountry[b].reduce((s,x) => s + (x.mw||0), 0) - byCountry[a].reduce((s,x) => s + (x.mw||0), 0)
+  );
+
+  const totMW = scoped.reduce((s,a) => s + (a.mw||0), 0);
+  const totCX = scoped.reduce((s,a) => s + (a.capex_usd_bn||0), 0);
+
+  let html = '';
+  html += '<div class="kpis" style="margin-bottom:10px">' + kpiHTML([
+    [scoped.length + ' announcements', 'Matching scope'],
+    [fmt(totMW,0) + ' MW', 'Announced MW (disclosed)'],
+    [fmt(totCX,2) + ' US$bn', 'Announced capex'],
+    [countries.length, 'Countries']
+  ]) + '</div>';
+
+  countries.forEach(ctry => {
+    const items = byCountry[ctry].slice().sort((a,b) => (b.mw||0) - (a.mw||0));
+    const cMW = items.reduce((s,x) => s + (x.mw||0), 0);
+    const cCX = items.reduce((s,x) => s + (x.capex_usd_bn||0), 0);
+    html += '<div style="margin-top:12px">';
+    html += '<h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px">'
+      + escapeHTML(ctry) + ' <span style="color:var(--dim);font-weight:normal;letter-spacing:0;text-transform:none">· '
+      + items.length + ' announcement' + (items.length>1?'s':'') + ' · '
+      + fmt(cMW,0) + ' MW' + (cCX>0 ? ' · ' + fmt(cCX,2) + ' US$bn' : '')
+      + '</span></h4>';
+    html += '<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr>'
+      + '<th>Project</th><th>Location</th><th class="num">MW</th><th class="num">Capex</th>'
+      + '<th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th>'
+      + '</tr></thead><tbody>';
+    items.forEach(a => {
+      // El campo "market" puede venir del extract original de notes; si no, usar country
+      const locHint = (a.notes && a.notes.match(/Location:\s*([^.]+?)\./) || [])[1] || '';
+      html += '<tr>'
+        + '<td>' + escapeHTML(a.project || '—') + '</td>'
+        + '<td>' + escapeHTML(locHint || ctry) + '</td>'
+        + '<td class="num">' + fmt(a.mw) + '</td>'
+        + '<td class="num">' + fmt(a.capex_usd_bn, 2) + '</td>'
+        + '<td>' + escapeHTML(a.phase || '—') + '</td>'
+        + '<td>' + escapeHTML(a.confidence || '—') + '</td>'
+        + '<td>' + escapeHTML(a.ann_date || '—') + '</td>'
+        + '<td>' + (a.url ? '<a href="' + escapeHTML(a.url) + '" target="_blank" rel="noopener">link</a>' : '—') + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+  });
+
+  html += '<p style="font-size:11px;color:var(--dim);margin-top:12px;border-top:1px dashed var(--line);padding-top:8px">'
+    + 'These are dashboard announcements — prospective, not summed with BNEF-verified capacity above. '
+    + 'Change the <b>Perspective</b> selector at the top of the profile to filter announcements by region or country.</p>';
+
+  body.innerHTML = html;
 }
 /* ============================================================
  * FASE 2 · Edición de campos cualitativos en la ficha
@@ -1054,7 +1150,7 @@ function drawCompanyCharts(f){
   try{ bar('coChartCap',topCap.map(x=>x[0]),[
     {label:'Live',data:topCap.map(x=>Math.round(x[1].live)),backgroundColor:'#f47220'},
     {label:'Under construction',data:topCap.map(x=>Math.round(x[1].uc)),backgroundColor:'#3a3a3c'},
-    {label:'Other pipeline',data:topCap.map(x=>Math.round(x[1].pipe)),backgroundColor:'#c9beb4'}
+    {label:'BNEF Pipeline',data:topCap.map(x=>Math.round(x[1].pipe)),backgroundColor:'#c9beb4'}
   ],null,false,{scales:{x:{stacked:true},y:{stacked:true}}}); }catch(_){}
   const cat={}; rs.forEach(r=>{const k=r[C.category]; if(k)cat[k]=(cat[k]||0)+(r[C.live]||0);});
   const catE=Object.entries(cat).sort((a,b)=>b[1]-a[1]);
@@ -1129,7 +1225,7 @@ function companyStatsHTML(f){
       </div>
     </div>
     <h4 style="font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 6px">Presence by country</h4>
-    <div style="overflow-x:auto;max-height:300px;overflow-y:auto"><table><thead><tr><th>Country</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num">Pipeline MW</th><th class="num">Future MW</th><th class="num">Land (ha)</th></tr></thead><tbody>${countryRows}</tbody></table></div>
+    <div style="overflow-x:auto;max-height:300px;overflow-y:auto"><table><thead><tr><th>Country</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num" title="BNEF Pipeline">BNEF Pipeline MW</th><th class="num">Future MW</th><th class="num">Land (ha)</th></tr></thead><tbody>${countryRows}</tbody></table></div>
   </div>`;
 }
 
@@ -1398,7 +1494,7 @@ function renderStats(){
   els('statKpis').innerHTML=kpiHTML([
     [fmt(sum(f,'live'),0)+' MW','Total live'],
     [fmt(sum(f,'headline'),0)+' MW','Total headline'],
-    [fmt(sum(f,'uc')+sum(f,'pipeline'),0)+' MW','Constr. + pipeline'],
+    [fmt(sum(f,'uc')+sum(f,'pipeline'),0)+' MW','UC + BNEF Pipeline'],
     [fmt(sum(f,'land')/1e4,0)+' ha','Aggregate land'],
     [f.length?fmt(sum(f,'live')/Math.max(1,f.filter(r=>r[C.live]>0).length),1)+' MW':'—','Avg. live per operational DC']
   ]);
@@ -1410,7 +1506,7 @@ function renderStats(){
   const rl=regs.map(g=>Math.round(sum(f.filter(r=>r[C.region]===g),'live')));
   const ru=regs.map(g=>Math.round(sum(f.filter(r=>r[C.region]===g),'uc')));
   const rp=regs.map(g=>Math.round(sum(f.filter(r=>r[C.region]===g),'pipeline')));
-  bar('chRegion',regs,[{label:'Live',data:rl,backgroundColor:NAVY},{label:'Under construction',data:ru,backgroundColor:TEAL},{label:'Other pipeline',data:rp,backgroundColor:'#c9beb4'}],null,false,{scales:{x:{stacked:true},y:{stacked:true}}});
+  bar('chRegion',regs,[{label:'Live',data:rl,backgroundColor:NAVY},{label:'Under construction',data:ru,backgroundColor:TEAL},{label:'BNEF Pipeline',data:rp,backgroundColor:'#c9beb4'}],null,false,{scales:{x:{stacked:true},y:{stacked:true}}});
   const sb={a:0,b:0,c:0,d:0,e:0}; f.forEach(r=>{const b=sizeBucket(r[C.headline]); if(b)sb[b]++;});
   bar('chSize',Object.keys(sb).map(k=>sizeLabel[k]),Object.values(sb),GREEN,false);
   if(charts.chLand)charts.chLand.destroy();
@@ -1435,7 +1531,7 @@ function renderStats(){
   bar('chCat',cats,[
     {label:'Live',data:cats.map(c=>Math.round(subTot[c].live)),backgroundColor:TEAL},
     {label:'Under construction',data:cats.map(c=>Math.round(subTot[c].uc)),backgroundColor:NAVY},
-    {label:'Other pipeline',data:cats.map(c=>Math.round(subTot[c].pipe)),backgroundColor:'#c9beb4'}
+    {label:'BNEF Pipeline',data:cats.map(c=>Math.round(subTot[c].pipe)),backgroundColor:'#c9beb4'}
   ],null,true,{scales:{x:{stacked:true},y:{stacked:true}}});
   const cross={};
   f.forEach(r=>{const k=(r[C.market]||'—')+'||'+(r[C.company]||'—');
@@ -1547,7 +1643,7 @@ function annScoped(){
 function renderAnn(){
  try{
   if(!ANN.length){
-    els('annKpis').innerHTML='<div style="padding:14px;color:var(--dim)">No announcements file loaded (anuncios.js missing or empty). The dashboard works normally without it.</div>';
+    els('annKpis').innerHTML='<div style="padding:14px;color:var(--dim)">No announcements loaded yet. Add one with the editor below.</div>';
     return;
   }
   const items=annScoped();
@@ -1807,13 +1903,14 @@ function renderMap(){
     var tot=function(kk){ var s=0; for(var i in agg){ if(inView(i)) s+=agg[i][kk]; } return s; };
     var nC=0; for(var i2 in agg){ if(inView(i2)&&agg[i2][metric]>0) nC++; }
     els('mapKpis').innerHTML=kpiHTML([
-      [fmt(tot('fut'),0)+' MW','Future (UC + pipeline)'],
+      [fmt(tot('fut'),0)+' MW','Future (UC + BNEF Pipeline)'],
       [fmt(tot('uc'),0)+' MW','Under construction'],
-      [fmt(tot('pipe'),0)+' MW','Other pipeline'],
+      [fmt(tot('pipe'),0)+' MW','BNEF Pipeline'],
       [fmt(tot('live'),0)+' MW','Live (reference)'],
+      [fmt(tot('ann'),0)+' MW','Announced (dashboard)'],
       [nC,'Countries with capacity']
     ]);
-    var mlabel={fut:'future (UC + pipeline)',uc:'under construction',pipe:'other pipeline',live:'live',ann:'ANNOUNCED (prospective, unverified)'}[metric];
+    var mlabel={fut:'future (UC + BNEF Pipeline)',uc:'under construction',pipe:'BNEF Pipeline',live:'live',ann:'Announced (dashboard prospective, do NOT sum with BNEF)'}[metric];
     els('mapTitle').textContent='Country '+mlabel+' capacity (MW) — '+mapState.view+' view';
     // tabla de países (siempre visible, independiente del canvas)
     try{
@@ -1821,7 +1918,7 @@ function renderMap(){
       ct.sort(function(a,b){return b[metric]-a[metric];});
       var cbody='';
       for(var ti=0;ti<ct.length;ti++){ var o=ct[ti];
-        cbody+='<tr><td>'+o.market+'</td><td>'+o.region+'</td><td class="num">'+fmt(o.live,0)+'</td><td class="num">'+fmt(o.uc,0)+'</td><td class="num">'+fmt(o.pipe,0)+'</td><td class="num">'+fmt(o.fut,0)+'</td><td class="num">'+o.n+'</td></tr>'; }
+        cbody+='<tr><td>'+o.market+'</td><td>'+o.region+'</td><td class="num">'+fmt(o.live,0)+'</td><td class="num">'+fmt(o.uc,0)+'</td><td class="num">'+fmt(o.pipe,0)+'</td><td class="num">'+fmt(o.fut,0)+'</td><td class="num" style="color:#ee6f2c">'+fmt(o.ann||0,0)+'</td><td class="num">'+o.n+'</td></tr>'; }
       var ctb=document.querySelector('#mapCountryTable tbody'); if(ctb) ctb.innerHTML=cbody;
     }catch(_){}
 
@@ -1842,12 +1939,12 @@ function renderMap(){
     try{
       var regs={};
       for(var i4 in agg){ if(!inView(i4)) continue; var o=agg[i4];
-        if(!regs[o.region]) regs[o.region]={c:{},n:0,live:0,uc:0,pipe:0};
-        var g=regs[o.region]; g.c[o.market]=1; g.n+=o.n; g.live+=o.live; g.uc+=o.uc; g.pipe+=o.pipe; }
+        if(!regs[o.region]) regs[o.region]={c:{},n:0,live:0,uc:0,pipe:0,ann:0};
+        var g=regs[o.region]; g.c[o.market]=1; g.n+=o.n; g.live+=o.live; g.uc+=o.uc; g.pipe+=o.pipe; g.ann+=(o.ann||0); }
       var rk=Object.keys(regs).sort(function(a,b){return (regs[b].uc+regs[b].pipe)-(regs[a].uc+regs[a].pipe);});
       var body='';
       for(var ii=0;ii<rk.length;ii++){ var rg=rk[ii], gg=regs[rg];
-        body+='<tr><td>'+rg+'</td><td class="num">'+Object.keys(gg.c).length+'</td><td class="num">'+gg.n+'</td><td class="num">'+fmt(gg.live,0)+'</td><td class="num">'+fmt(gg.uc,0)+'</td><td class="num">'+fmt(gg.pipe,0)+'</td><td class="num">'+fmt(gg.uc+gg.pipe,0)+'</td></tr>'; }
+        body+='<tr><td>'+rg+'</td><td class="num">'+Object.keys(gg.c).length+'</td><td class="num">'+gg.n+'</td><td class="num">'+fmt(gg.live,0)+'</td><td class="num">'+fmt(gg.uc,0)+'</td><td class="num">'+fmt(gg.pipe,0)+'</td><td class="num">'+fmt(gg.uc+gg.pipe,0)+'</td><td class="num" style="color:#ee6f2c">'+fmt(gg.ann,0)+'</td></tr>'; }
       var tb=document.querySelector('#mapRegTable tbody'); if(tb) tb.innerHTML=body;
     }catch(_){}
   }catch(e){
@@ -1953,11 +2050,82 @@ els('mapView').addEventListener('change',e=>{mapState.view=e.target.value;render
 
 /* ---------- Drill-down inline del mapa (RESPETA los filtros del mapa) ---------- */
 function openMapCountryDetail(marketName){
-  // Aplica exactamente los MISMOS filtros que el mapa (mapScoped) + país concreto.
-  var rows = mapScoped().filter(function(r){ return r[C.market]===marketName; });
+  // Aplica exactamente los MISMOS filtros que el mapa (mapScoped) + país concreto + metric activo.
+  var metric = mapState.metric || 'live';
+  var metricLabel = ({live:'Live capacity',uc:'Under construction',pipe:'BNEF Pipeline',fut:'Future (UC + BNEF Pipeline)',ann:'Announced (dashboard)'})[metric] || metric;
   var ct = els('mapCompanyType') ? els('mapCompanyType').value : '';
   var co = els('mapCompany') ? els('mapCompany').value.trim() : '';
   var ctLabel = ct==='hyper'?'Hyperscalers':ct==='neo'?'Neocloud / GPU cloud':ct==='colo'?'Colocation':'All company types';
+
+  var html='<h2>'+escapeHTML(marketName)+' <span style="color:#f47220;font-size:14px">· map drill-down</span></h2>';
+  html+='<div class="sub" style="margin-bottom:10px">Applied map filters — Metric: <b style="color:#f47220">'+escapeHTML(metricLabel)+'</b>'+
+    ' · Company type: <b>'+escapeHTML(ctLabel)+'</b>'+
+    (co?' · Company name: <b>'+escapeHTML(co)+'</b>':'')+
+    ' · Facility type: <b>'+(els('mapSubcat').value||'all')+'</b>'+
+    ' · Status: <b>'+(els('mapStatus2').value||'all')+'</b>'+
+    ' · Size: <b>'+(els('mapSize').value||'all')+'</b></div>';
+
+  // Si el metric es "Announced", mostrar los anuncios de dashboard para este país
+  // (no los DCs BNEF, porque son layers distintos y no se suman).
+  if(metric==='ann'){
+    var iso3 = (function(){ for(var i in MAPX){ if(MAPX[i].market===marketName) return i; } return null; })();
+    var annsHere = (typeof ANN!=='undefined' ? ANN : []).filter(function(a){
+      if(!a.iso3 || a.phase==='platform') return false;
+      if(a.iso3 !== iso3) return false;
+      // Respetar filtro Company type de mapa si aplica
+      if(ct==='hyper' && !COMPANY_TYPES.hyper.has(a.company)) return false;
+      if(ct==='neo' && !COMPANY_TYPES.neo.has(a.company)) return false;
+      if(ct==='colo' && !COMPANY_TYPES.colo.has(a.company)) return false;
+      if(co && a.company.toLowerCase().indexOf(co.toLowerCase())===-1) return false;
+      return true;
+    });
+    if(!annsHere.length){
+      html+='<div class="na" style="padding:20px;text-align:center;color:#888">No announcements for '+escapeHTML(marketName)+' match the current map filters.</div>';
+    } else {
+      var totMW = annsHere.reduce(function(s,a){return s+(a.mw||0);}, 0);
+      var totCX = annsHere.reduce(function(s,a){return s+(a.capex_usd_bn||0);}, 0);
+      var byCoAnn = {};
+      annsHere.forEach(function(a){
+        if(!byCoAnn[a.company]) byCoAnn[a.company]={n:0,mw:0,cx:0};
+        var o=byCoAnn[a.company]; o.n++; o.mw+=(a.mw||0); o.cx+=(a.capex_usd_bn||0);
+      });
+      var compsAnn = Object.entries(byCoAnn).sort(function(a,b){return b[1].mw-a[1].mw;});
+
+      html+='<div class="kpis">'+kpiHTML([
+        [annsHere.length+' announcements','Matching filters'],
+        [fmt(totMW,0)+' MW','Announced MW (disclosed)'],
+        [fmt(totCX,2)+' US$bn','Announced capex'],
+        [compsAnn.length,'Companies']
+      ])+'</div>';
+
+      html+='<div class="panel"><h3>By company ('+compsAnn.length+')</h3>'+
+        '<div style="overflow-x:auto"><table><thead><tr><th>Company</th><th class="num"># ann.</th><th class="num">MW</th><th class="num">Capex US$bn</th></tr></thead><tbody>'+
+        compsAnn.map(function(x){
+          return '<tr><td>'+escapeHTML(x[0])+'</td>'+
+            '<td class="num">'+x[1].n+'</td>'+
+            '<td class="num">'+fmt(x[1].mw,0)+'</td>'+
+            '<td class="num">'+fmt(x[1].cx,2)+'</td></tr>';
+        }).join('')+'</tbody></table></div></div>';
+
+      html+='<div class="panel"><h3>Announcements detail ('+annsHere.length+')</h3>'+
+        '<div style="overflow-x:auto;max-height:400px;overflow-y:auto"><table><thead><tr><th>Project</th><th>Company</th><th class="num">MW</th><th class="num">Capex</th><th>Phase</th><th>Confidence</th><th>Date</th><th>Source</th></tr></thead><tbody>'+
+        annsHere.sort(function(a,b){return (b.mw||0)-(a.mw||0);}).map(function(a){
+          return '<tr><td>'+escapeHTML(a.project||'—')+'</td>'+
+            '<td>'+escapeHTML(a.company||'—')+'</td>'+
+            '<td class="num">'+fmt(a.mw)+'</td>'+
+            '<td class="num">'+fmt(a.capex_usd_bn,2)+'</td>'+
+            '<td>'+escapeHTML(a.phase||'—')+'</td>'+
+            '<td>'+escapeHTML(a.confidence||'—')+'</td>'+
+            '<td>'+escapeHTML(a.ann_date||'—')+'</td>'+
+            '<td>'+(a.url?'<a href="'+escapeHTML(a.url)+'" target="_blank" rel="noopener">link</a>':'—')+'</td></tr>';
+        }).join('')+'</tbody></table></div></div>';
+    }
+    openModal(html);
+    return;
+  }
+
+  // Resto de metrics (live/uc/pipe/fut): mostrar DCs verificados por BNEF
+  var rows = mapScoped().filter(function(r){ return r[C.market]===marketName; });
   // agrupar por empresa
   var byCo={};
   rows.forEach(function(r){
@@ -1965,16 +2133,14 @@ function openMapCountryDetail(marketName){
     if(!byCo[co]) byCo[co]={n:0,live:0,uc:0,pipe:0,rows:[]};
     var o=byCo[co]; o.n++; o.live+=r[C.live]||0; o.uc+=r[C.uc]||0; o.pipe+=r[C.pipeline]||0; o.rows.push(r);
   });
-  var comps=Object.entries(byCo).sort(function(a,b){return b[1].live-a[1].live;});
+  // Ordenar por metric activo si aplica
+  var sortKey = ({live:'live',uc:'uc',pipe:'pipe',fut:'fut'})[metric] || 'live';
+  var comps=Object.entries(byCo).map(function(x){
+    x[1].fut = x[1].uc + x[1].pipe;
+    return x;
+  }).sort(function(a,b){return b[1][sortKey]-a[1][sortKey];});
   var totLive=0,totUC=0,totPipe=0;
   comps.forEach(function(x){ totLive+=x[1].live; totUC+=x[1].uc; totPipe+=x[1].pipe; });
-
-  var html='<h2>'+escapeHTML(marketName)+' <span style="color:#f47220;font-size:14px">· map drill-down</span></h2>';
-  html+='<div class="sub" style="margin-bottom:10px">Applied map filters — Company type: <b>'+escapeHTML(ctLabel)+'</b>'+
-    (co?' · Company name: <b>'+escapeHTML(co)+'</b>':'')+
-    ' · Facility type: <b>'+(els('mapSubcat').value||'all')+'</b>'+
-    ' · Status: <b>'+(els('mapStatus2').value||'all')+'</b>'+
-    ' · Size: <b>'+(els('mapSize').value||'all')+'</b></div>';
 
   if(!rows.length){
     html+='<div class="na" style="padding:20px;text-align:center;color:#888">No data centers in '+escapeHTML(marketName)+' match the current map filters.</div>';
@@ -1983,12 +2149,12 @@ function openMapCountryDetail(marketName){
       [rows.length+' DCs','Facilities matching filters'],
       [fmt(totLive,0)+' MW','Live capacity'],
       [fmt(totUC,0)+' MW','Under construction'],
-      [fmt(totPipe,0)+' MW','Other pipeline'],
+      [fmt(totPipe,0)+' MW','BNEF Pipeline'],
       [comps.length,'Companies']
     ])+'</div>';
 
     html+='<div class="panel"><h3>By company ('+comps.length+')</h3>'+
-      '<div style="overflow-x:auto"><table><thead><tr><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr.</th><th class="num">Pipeline</th></tr></thead><tbody>'+
+      '<div style="overflow-x:auto"><table><thead><tr><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr.</th><th class="num" title="BNEF Pipeline">BNEF Pipeline</th></tr></thead><tbody>'+
       comps.map(function(x){
         return '<tr><td><a href="#" data-mapdrill-co="'+escapeHTML(x[0])+'" data-mapdrill-mk="'+escapeHTML(marketName)+'">'+escapeHTML(x[0])+'</a></td>'+
           '<td class="num">'+x[1].n+'</td>'+
@@ -1998,7 +2164,7 @@ function openMapCountryDetail(marketName){
       }).join('')+'</tbody></table></div></div>';
 
     html+='<div class="panel"><h3>Facilities detail ('+rows.length+')</h3>'+
-      '<div style="overflow-x:auto;max-height:400px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Company</th><th>Status</th><th>Facility type</th><th class="num">Live</th><th class="num">UC</th><th class="num">Pipeline</th></tr></thead><tbody>'+
+      '<div style="overflow-x:auto;max-height:400px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Company</th><th>Status</th><th>Facility type</th><th class="num">Live</th><th class="num">UC</th><th class="num" title="BNEF Pipeline">BNEF Pipe</th></tr></thead><tbody>'+
       rows.sort(function(a,b){return (b[C.live]||0)-(a[C.live]||0);}).map(function(r){
         return '<tr data-mapdrill-dc="'+R.indexOf(r)+'" style="cursor:pointer"><td>'+escapeHTML(r[C.name]||'—')+'</td>'+
           '<td>'+escapeHTML(r[C.company]||'—')+'</td>'+
@@ -2137,9 +2303,9 @@ function renderHyperCompare(){
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav button').forEach(o=>o.classList.remove('on')); b.classList.add('on');
   ['search','stats','ramp','map','ann'].forEach(t=>{ var el=els('tab-'+t); if(el) el.style.display = t===b.dataset.tab?'':'none'; });
-  if(b.dataset.tab==='stats') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderStats(); renderStatsAnn();}));
+  if(b.dataset.tab==='stats') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderStats(); renderStatsAnn(); renderHyperCompare();}));
   if(b.dataset.tab==='ramp') requestAnimationFrame(()=>renderRamp());
-  if(b.dataset.tab==='map') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderMap(); renderHyperCompare();}));
+  if(b.dataset.tab==='map') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderMap();}));
   if(b.dataset.tab==='ann') requestAnimationFrame(()=>renderAnn());
 }));
 
