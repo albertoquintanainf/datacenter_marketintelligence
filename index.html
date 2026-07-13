@@ -351,6 +351,42 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
       <div style="overflow-x:auto"><table id="mapRegTable"><thead><tr><th>Region</th><th class="num">Countries</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr. MW</th><th class="num">Pipeline MW</th><th class="num">Future MW</th></tr></thead><tbody></tbody></table></div>
     </div>
   </div>
+
+  <!-- Panel: comparativa hyperscalers por país (matriz color por empresa) -->
+  <div class="panel" style="margin-top:14px">
+    <h3>Hyperscaler footprint by country · live MW</h3>
+    <p style="font-size:12px;color:var(--dim);margin-bottom:8px">Each row is a hyperscaler with its brand color; each column is a country (top 15 by hyperscaler live capacity). Empty cells = no BNEF-recorded capacity for that combination. This view ignores the map filters — always shows all hyperscalers.</p>
+    <div style="overflow-x:auto;max-height:520px"><table id="hyperCompareTable">
+      <thead></thead>
+      <tbody id="hyperCompareBody"></tbody>
+    </table></div>
+  </div>
+
+  <!-- Panel: nota informativa con las 3 categorías -->
+  <div class="panel" style="margin-top:14px">
+    <h3>Company type definitions</h3>
+    <p style="font-size:12px;color:var(--dim);margin-bottom:10px">These groups are defined <b>by this dashboard</b>, not by BNEF. BNEF's own taxonomy is by facility type (colocation vs self-build), not by operator type. Names must match BNEF's naming exactly to be classified — misspellings or variants are counted as "unclassified".</p>
+    <div class="stats-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div>
+        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Hyperscalers (10)</p>
+        <p style="font-size:12px;line-height:1.55">Large public cloud + consumer internet firms that operate their own DC capacity at global scale. Includes: <b>Amazon Web Services, Microsoft, Google, Meta, Oracle, Apple, Alibaba, Tencent, ByteDance, TikTok</b>.</p>
+        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Notes:</i> BNEF records 156 DCs under AWS, 77 Microsoft, 45 Google, 26 Meta. ByteDance and TikTok appear here for completeness but BNEF has no self-operated DCs recorded (they lease heavily from colos, which show under the colo owner). IBM Cloud is NOT included — it is ambiguous between hyperscaler and enterprise cloud.</p>
+      </div>
+      <div>
+        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Neocloud / GPU cloud (14)</p>
+        <p style="font-size:12px;line-height:1.55">Specialist AI/GPU-as-a-service providers. Includes: <b>CoreWeave, Lambda, Nebius, Crusoe, Vultr, Together AI, Paperspace, FluidStack, Genesis Digital Assets, Vast.ai, RunPod, Denvr Dataworks, Voltage Park, Genesis Cloud</b>.</p>
+        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Caveat:</i> BNEF underrepresents this category — many neoclouds lease from colos rather than operating branded sites, so their footprint here is a floor, not a real measure of the segment.</p>
+      </div>
+      <div>
+        <p style="color:#f47220;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Colocation (36)</p>
+        <p style="font-size:12px;line-height:1.55">Landlord operators that build and lease DC space to third parties. Includes: <b>Equinix, Digital Realty, Vantage, CyrusOne, DATA4, NTT (all subsidiaries), Iron Mountain, Colt DCS, Global Switch, STACK, Aligned, QTS, CoreSite, EdgeConneX, Interxion, KDDI Telehouse, Digital Edge DC, PDG, Flexential, Cologix, Switch, SUNeVision iAdvantage, Quantum Switch</b> + Digital Realty JVs (Bersama, MC), NTT filials (Global DC, Comms, DATA, Docomo), CyrusOne KEP, STACK Americas, Stack Telecom.</p>
+        <p style="font-size:11px;color:var(--dim);margin-top:6px"><i>Not classified but arguably colo:</i> GDS Holdings (77 DCs), DataBank (54), Ascenty (37), STT Global Data Centres India (29), NEXTDC (21), Scala (21), NorthC (25), AtlasEdge (21). These are large operators not in the list yet — flag if you want them added.</p>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--dim);margin-top:12px;border-top:1px dashed var(--line);padding-top:10px">
+      <b>Source:</b> classifications curated for this dashboard using BNEF's Company field; naming aligned with BNEF's exact strings (case-sensitive). If a company appears under a variant name in BNEF that is not on the list, it will not be classified — see the "unclassified companies" note in DEPLOY.md for how to add them.
+    </p>
+  </div>
 </section>
 
 
@@ -1898,7 +1934,14 @@ function renderMap(){
     function findAt(mx,my){ var best=null,bestArea=Infinity,arr=window._mapHit||[]; for(var i=0;i<arr.length;i++){ var h=arr[i]; if(mx>=h.minx&&mx<=h.maxx&&my>=h.miny&&my<=h.maxy){ var a=(h.maxx-h.minx)*(h.maxy-h.miny); if(a<bestArea){bestArea=a;best=h;} } } return best; }
     canvas.onmousemove=function(e){ var rect=canvas.getBoundingClientRect(); var mx=(e.clientX-rect.left)/rect.width*canvas.width, my=(e.clientY-rect.top)/rect.height*canvas.height; var h=findAt(mx,my); if(!h){ if(tip)tip.style.display='none'; canvas.style.cursor='default'; return; } canvas.style.cursor='pointer'; if(tip){ tip.style.display='block'; tip.style.left=(e.clientX-rect.left+12)+'px'; tip.style.top=(e.clientY-rect.top+12)+'px'; tip.innerHTML='<b>'+h.o.market+'</b> · '+h.o.region+'<br>Future '+fmt(h.o.fut,0)+' MW (UC '+fmt(h.o.uc,0)+' + pipe '+fmt(h.o.pipe,0)+')<br>Live '+fmt(h.o.live,0)+' MW · '+h.o.n+' DC'+(h.o.ann?('<br><span style="color:#f8b48a">Announced (prospective): '+fmt(h.o.ann,0)+' MW</span>'):''); } };
     canvas.onmouseleave=function(){ if(tip)tip.style.display='none'; };
-    canvas.onclick=function(e){ var rect=canvas.getBoundingClientRect(); var mx=(e.clientX-rect.left)/rect.width*canvas.width, my=(e.clientY-rect.top)/rect.height*canvas.height; var h=findAt(mx,my); if(h){ els('fMarket').value=h.o.market; applyFilters(); document.querySelector('nav button[data-tab="search"]').click(); } };
+    canvas.onclick=function(e){
+      var rect=canvas.getBoundingClientRect();
+      var mx=(e.clientX-rect.left)/rect.width*canvas.width, my=(e.clientY-rect.top)/rect.height*canvas.height;
+      var h=findAt(mx,my);
+      if(!h) return;
+      // Abrir el drill-down INLINE del mapa (respeta los filtros del mapa)
+      openMapCountryDetail(h.o.market);
+    };
   }catch(e){
     // canvas falló: mostrar aviso dentro del panel, pero KPIs/tabla ya están visibles
     var cvx=els('mapCanvas');
@@ -1908,13 +1951,195 @@ function renderMap(){
 els('mapMetric').addEventListener('change',e=>{mapState.metric=e.target.value;renderMap();});
 els('mapView').addEventListener('change',e=>{mapState.view=e.target.value;renderMap();});
 
+/* ---------- Drill-down inline del mapa (RESPETA los filtros del mapa) ---------- */
+function openMapCountryDetail(marketName){
+  // Aplica exactamente los MISMOS filtros que el mapa (mapScoped) + país concreto.
+  var rows = mapScoped().filter(function(r){ return r[C.market]===marketName; });
+  var ct = els('mapCompanyType') ? els('mapCompanyType').value : '';
+  var co = els('mapCompany') ? els('mapCompany').value.trim() : '';
+  var ctLabel = ct==='hyper'?'Hyperscalers':ct==='neo'?'Neocloud / GPU cloud':ct==='colo'?'Colocation':'All company types';
+  // agrupar por empresa
+  var byCo={};
+  rows.forEach(function(r){
+    var co=r[C.company]||'—';
+    if(!byCo[co]) byCo[co]={n:0,live:0,uc:0,pipe:0,rows:[]};
+    var o=byCo[co]; o.n++; o.live+=r[C.live]||0; o.uc+=r[C.uc]||0; o.pipe+=r[C.pipeline]||0; o.rows.push(r);
+  });
+  var comps=Object.entries(byCo).sort(function(a,b){return b[1].live-a[1].live;});
+  var totLive=0,totUC=0,totPipe=0;
+  comps.forEach(function(x){ totLive+=x[1].live; totUC+=x[1].uc; totPipe+=x[1].pipe; });
+
+  var html='<h2>'+escapeHTML(marketName)+' <span style="color:#f47220;font-size:14px">· map drill-down</span></h2>';
+  html+='<div class="sub" style="margin-bottom:10px">Applied map filters — Company type: <b>'+escapeHTML(ctLabel)+'</b>'+
+    (co?' · Company name: <b>'+escapeHTML(co)+'</b>':'')+
+    ' · Facility type: <b>'+(els('mapSubcat').value||'all')+'</b>'+
+    ' · Status: <b>'+(els('mapStatus2').value||'all')+'</b>'+
+    ' · Size: <b>'+(els('mapSize').value||'all')+'</b></div>';
+
+  if(!rows.length){
+    html+='<div class="na" style="padding:20px;text-align:center;color:#888">No data centers in '+escapeHTML(marketName)+' match the current map filters.</div>';
+  } else {
+    html+='<div class="kpis">'+kpiHTML([
+      [rows.length+' DCs','Facilities matching filters'],
+      [fmt(totLive,0)+' MW','Live capacity'],
+      [fmt(totUC,0)+' MW','Under construction'],
+      [fmt(totPipe,0)+' MW','Other pipeline'],
+      [comps.length,'Companies']
+    ])+'</div>';
+
+    html+='<div class="panel"><h3>By company ('+comps.length+')</h3>'+
+      '<div style="overflow-x:auto"><table><thead><tr><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr.</th><th class="num">Pipeline</th></tr></thead><tbody>'+
+      comps.map(function(x){
+        return '<tr><td><a href="#" data-mapdrill-co="'+escapeHTML(x[0])+'" data-mapdrill-mk="'+escapeHTML(marketName)+'">'+escapeHTML(x[0])+'</a></td>'+
+          '<td class="num">'+x[1].n+'</td>'+
+          '<td class="num">'+fmt(x[1].live,0)+'</td>'+
+          '<td class="num">'+fmt(x[1].uc,0)+'</td>'+
+          '<td class="num">'+fmt(x[1].pipe,0)+'</td></tr>';
+      }).join('')+'</tbody></table></div></div>';
+
+    html+='<div class="panel"><h3>Facilities detail ('+rows.length+')</h3>'+
+      '<div style="overflow-x:auto;max-height:400px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Company</th><th>Status</th><th>Facility type</th><th class="num">Live</th><th class="num">UC</th><th class="num">Pipeline</th></tr></thead><tbody>'+
+      rows.sort(function(a,b){return (b[C.live]||0)-(a[C.live]||0);}).map(function(r){
+        return '<tr data-mapdrill-dc="'+R.indexOf(r)+'" style="cursor:pointer"><td>'+escapeHTML(r[C.name]||'—')+'</td>'+
+          '<td>'+escapeHTML(r[C.company]||'—')+'</td>'+
+          '<td>'+escapeHTML(r[C.status]||'—')+'</td>'+
+          '<td>'+escapeHTML(r[C.subcategory]||r[C.category]||'—')+'</td>'+
+          '<td class="num">'+fmt(r[C.live])+'</td>'+
+          '<td class="num">'+fmt(r[C.uc])+'</td>'+
+          '<td class="num">'+fmt(r[C.pipeline])+'</td></tr>';
+      }).join('')+'</tbody></table></div></div>';
+
+    html+='<div class="toolbar"><button class="btn" data-mapdrill-search="'+escapeHTML(marketName)+'">→ Open in Search tab (copies filters)</button></div>';
+  }
+  openModal(html);
+}
+
+// Delegación de eventos para los links dentro del drill-down del mapa
+document.addEventListener('click', function(e){
+  var a = e.target.closest && e.target.closest('[data-mapdrill-co]');
+  if(a){
+    e.preventDefault();
+    var co = a.getAttribute('data-mapdrill-co');
+    var mk = a.getAttribute('data-mapdrill-mk');
+    closeModal();
+    openCompany(co, 'C:'+mk);
+    return;
+  }
+  var tr = e.target.closest && e.target.closest('[data-mapdrill-dc]');
+  if(tr){
+    e.preventDefault();
+    var idx = parseInt(tr.getAttribute('data-mapdrill-dc'),10);
+    closeModal();
+    openDCByIdx(idx);
+    return;
+  }
+  var btn = e.target.closest && e.target.closest('[data-mapdrill-search]');
+  if(btn){
+    e.preventDefault();
+    var mk2 = btn.getAttribute('data-mapdrill-search');
+    closeModal();
+    applyMapFiltersToSearch(mk2);
+  }
+});
+
+function applyMapFiltersToSearch(marketName){
+  // Copia los filtros del mapa a la pestaña Search y salta a ella.
+  // Search NO tiene filtro de company type; si el mapa tiene uno seleccionado,
+  // aviso al usuario para que sepa que no se puede replicar 1:1.
+  var ct = els('mapCompanyType') ? els('mapCompanyType').value : '';
+  var co = els('mapCompany') ? els('mapCompany').value.trim() : '';
+  var sc = els('mapSubcat') ? els('mapSubcat').value : '';
+  var st = els('mapStatus2') ? els('mapStatus2').value : '';
+  var sz = els('mapSize') ? els('mapSize').value : '';
+  els('fMarket').value = marketName;
+  if(els('fCompany')) els('fCompany').value = co;
+  if(els('fSubcat')) els('fSubcat').value = sc;
+  if(els('fStatus')) els('fStatus').value = st;
+  if(els('fSize')) els('fSize').value = sz;
+  applyFilters();
+  document.querySelector('nav button[data-tab="search"]').click();
+  if(ct){
+    // Aviso claro: Search no tiene filtro de tipo, así que va a mostrar más de lo que el mapa mostraba.
+    setTimeout(function(){
+      alert('Note: the Search tab does not have a "Company type" filter. Results will include ALL companies in '+marketName+', not only '+
+        (ct==='hyper'?'hyperscalers':ct==='neo'?'neoclouds':'colos')+
+        '. Use the map drill-down modal for filter-consistent view.');
+    }, 100);
+  }
+}
+
+/* ---------- Compare hyperscalers: cada empresa un color en el mapa ---------- */
+// paleta consistente y accesible
+var HYPER_COLORS = {
+  'Amazon Web Services':'#FF9900',
+  'Microsoft':          '#00A4EF',
+  'Google':             '#EA4335',
+  'Meta':               '#1877F2',
+  'Oracle':             '#C74634',
+  'Apple':              '#7D7D7D',
+  'Alibaba':            '#FF6A00',
+  'Tencent':            '#0052D9',
+  'ByteDance':          '#25F4EE',
+  'TikTok':             '#010101'
+};
+function renderHyperCompare(){
+  // Rellena la tabla comparativa: cada fila un hyperscaler, columnas = países con capacidad
+  var container = els('hyperCompareBody');
+  if(!container) return;
+  // universo: aplicar SOLO los filtros del buscador (fMarket/fRegion), no el de mapa,
+  // porque este panel es un contexto propio de "comparativa hyperscalers".
+  // Filtrar filas SOLO de hyperscalers
+  var hyperList = Array.from(COMPANY_TYPES.hyper);
+  var rowsAll = R.filter(function(r){ return COMPANY_TYPES.hyper.has(r[C.company]); });
+  // agrupar (empresa, país) → live/uc/pipe
+  var agg = {};
+  var countries = {};
+  rowsAll.forEach(function(r){
+    var co=r[C.company], mk=r[C.market]||'—';
+    var key=co+'|'+mk;
+    if(!agg[key]) agg[key]={co:co,mk:mk,live:0,uc:0,pipe:0};
+    agg[key].live+=r[C.live]||0; agg[key].uc+=r[C.uc]||0; agg[key].pipe+=r[C.pipeline]||0;
+    countries[mk] = (countries[mk]||0) + (r[C.live]||0);
+  });
+  // top 15 países por live capacity total de hyperscalers
+  var topCountries = Object.entries(countries).sort(function(a,b){return b[1]-a[1];}).slice(0,15).map(function(x){return x[0];});
+  // solo hyperscalers CON alguna capacidad
+  var hyperWithData = hyperList.filter(function(co){
+    return rowsAll.some(function(r){ return r[C.company]===co; });
+  });
+  if(!hyperWithData.length){
+    container.innerHTML='<tr><td colspan="17" class="na" style="padding:14px;text-align:center">No hyperscaler data available.</td></tr>';
+    return;
+  }
+  var html='';
+  // fila cabecera de países
+  var head='<tr><th style="min-width:180px">Hyperscaler</th><th class="num">Total live MW</th>';
+  topCountries.forEach(function(c){ head+='<th class="num" style="font-size:11px">'+escapeHTML(c)+'</th>'; });
+  head+='</tr>';
+  var thead=document.querySelector('#hyperCompareTable thead');
+  if(thead) thead.innerHTML=head;
+  hyperWithData.forEach(function(co){
+    var color = HYPER_COLORS[co] || '#999';
+    var totLive = rowsAll.filter(function(r){return r[C.company]===co;}).reduce(function(s,r){return s+(r[C.live]||0);},0);
+    html+='<tr><td><span style="display:inline-block;width:12px;height:12px;background:'+color+';border-radius:2px;margin-right:8px;vertical-align:middle"></span><b>'+escapeHTML(co)+'</b></td>';
+    html+='<td class="num"><b>'+fmt(totLive,0)+'</b></td>';
+    topCountries.forEach(function(c){
+      var k=co+'|'+c;
+      var v = agg[k] ? agg[k].live : 0;
+      html+='<td class="num" style="'+(v>0?'background:'+color+'22':'')+'">'+(v>0?fmt(v,0):'')+'</td>';
+    });
+    html+='</tr>';
+  });
+  container.innerHTML=html;
+}
+
 /* ---------- tabs: redibujar gráficas al activar (fix canvas oculto = tamaño 0) ---------- */
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav button').forEach(o=>o.classList.remove('on')); b.classList.add('on');
   ['search','stats','ramp','map','ann'].forEach(t=>{ var el=els('tab-'+t); if(el) el.style.display = t===b.dataset.tab?'':'none'; });
   if(b.dataset.tab==='stats') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderStats(); renderStatsAnn();}));
   if(b.dataset.tab==='ramp') requestAnimationFrame(()=>renderRamp());
-  if(b.dataset.tab==='map') requestAnimationFrame(()=>requestAnimationFrame(()=>renderMap()));
+  if(b.dataset.tab==='map') requestAnimationFrame(()=>requestAnimationFrame(()=>{renderMap(); renderHyperCompare();}));
   if(b.dataset.tab==='ann') requestAnimationFrame(()=>renderAnn());
 }));
 
