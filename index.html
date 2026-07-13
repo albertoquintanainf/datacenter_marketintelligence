@@ -314,40 +314,6 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     <div style="align-self:end"><button class="btn" onclick="resetStatFilters()">Reset local filters</button></div>
   </div>
   <div class="kpis" id="statKpis"></div>
-  <div class="stats-grid">
-    <div class="panel"><h3>Top 15 countries by live capacity (MW)</h3><div class="chartbox tall"><canvas id="chCountry"></canvas></div></div>
-    <div class="panel"><h3>Top 15 companies by live capacity (MW)</h3><div class="chartbox tall"><canvas id="chCompany"></canvas></div></div>
-    <div class="panel"><h3>Capacity by region · live vs construction vs pipeline</h3><div class="chartbox"><canvas id="chRegion"></canvas></div></div>
-    <div class="panel"><h3>Distribution by facility size (number of DCs)</h3><div class="chartbox"><canvas id="chSize"></canvas></div></div>
-    <div class="panel"><h3>Land vs headline capacity (each point = 1 DC, land reported)</h3><div class="chartbox"><canvas id="chLand"></canvas></div></div>
-    <div class="panel"><h3>Facility subcategory — top 10 by live MW</h3><div class="chartbox"><canvas id="chSeg"></canvas></div></div>
-    <div class="panel"><h3>Facility status (number of DCs)</h3><div class="chartbox"><canvas id="chStatus"></canvas></div></div>
-    <div class="panel"><h3>Facility type · live vs constr. vs pipeline (MW)</h3><div class="chartbox tall"><canvas id="chCat"></canvas></div></div>
-  </div>
-  <div class="panel" style="margin-top:14px"><h3>Facility type glossary — how BNEF classifies data centers</h3>
-    <div style="font-size:13px;line-height:1.6">
-    <p style="margin-bottom:8px">The database uses two levels. <b>Category</b> answers <i>who owns and runs it</i>; <b>Subcategory</b> answers <i>what it is used for</i>. Hyperscaler is not a category here — it appears split across both, as explained below.</p>
-    <div class="stats-grid" style="margin-top:6px">
-      <div>
-        <p style="color:var(--accent);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Colocation — a landlord rents space/power to tenants</p>
-        <p style="margin-bottom:6px"><b>Retail</b>: tenants rent by the rack or cage, sharing a data hall. Many small customers, connectivity-driven. Highest facility count, lowest average size.</p>
-        <p style="margin-bottom:6px"><b>Wholesale</b>: tenants lease whole halls or buildings (typically ≥1 MW), often a single large customer per space. This is where most hyperscaler <i>leased</i> capacity sits — the biggest single block of live MW in the database.</p>
-        <p><b>Build-to-suit</b>: a facility purpose-built and leased to one specific tenant to their spec.</p>
-      </div>
-      <div>
-        <p style="color:var(--accent);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Self-build — the operator owns and runs it for its own use</p>
-        <p style="margin-bottom:6px"><b>Self-build Public Cloud</b>: owned cloud-region campuses (the hyperscalers' <i>owned</i> estate — AWS, Azure, Google, Oracle).</p>
-        <p style="margin-bottom:6px"><b>Self-build Social Media / AI / Content / Crypto / HPC</b>: owned by the end-user for that workload (e.g. Meta social media; AI training campuses).</p>
-        <p><b>Self-build Network & Telco / Financial / Public Sector / SI-MSP</b>: owned by telcos, banks, governments or IT-service firms for internal needs.</p>
-      </div>
-    </div>
-    <p style="margin-top:10px;color:var(--dim);font-size:12px"><b>So where are the hyperscalers?</b> A hyperscaler (AWS, Microsoft, Google, Meta, Oracle) is a <i>company type</i>, not a facility type. Their footprint is split: owned campuses show up as <i>Self-build Public Cloud</i> (or Social Media / AI), while the capacity they <i>lease</i> from colocation landlords shows up as <i>Wholesale</i>. To see a hyperscaler's full footprint, filter by company in tab 01 rather than by facility type.</p>
-    </div>
-  </div>
-  <div class="panel" style="margin-top:14px"><h3>Country × company — top 20 combinations by live MW</h3>
-    <div style="overflow-x:auto"><table id="crossTable"><thead><tr><th>Country</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Constr. MW</th><th class="num" title="BNEF Pipeline">BNEF Pipeline MW</th><th class="num">Land (ha)</th></tr></thead><tbody></tbody></table></div>
-  </div>
-
   <div class="panel" id="statsAnnPanel" style="margin-top:14px">
     <h3><span style="background:#fdecd6;color:#9a4f00;padding:2px 8px;border-radius:9px;font-size:11px;letter-spacing:.5px;font-family:var(--mono,monospace)">ANNOUNCED</span> Prospective layer — summary (kept separate from BNEF above)</h3>
     <div class="kpis" id="statsAnnKpis"></div>
@@ -389,6 +355,40 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
       <b>Source:</b> classifications curated for this dashboard using BNEF's Company field; naming aligned with BNEF's exact strings (case-sensitive). If a company appears under a variant name in BNEF that is not on the list, it will not be classified — see the "unclassified companies" note in DEPLOY.md for how to add them.
     </p>
   </div>
+  <div class="stats-grid">
+    <div class="panel"><h3>Top 15 countries by live capacity (MW)</h3><div class="chartbox tall"><canvas id="chCountry"></canvas></div></div>
+    <div class="panel"><h3>Top 15 companies by live capacity (MW)</h3><div class="chartbox tall"><canvas id="chCompany"></canvas></div></div>
+    <div class="panel"><h3>Capacity by region · live vs construction vs pipeline</h3><div class="chartbox"><canvas id="chRegion"></canvas></div></div>
+    <div class="panel"><h3>Distribution by facility size (number of DCs)</h3><div class="chartbox"><canvas id="chSize"></canvas></div></div>
+    <div class="panel"><h3>Land vs headline capacity (each point = 1 DC, land reported)</h3><div class="chartbox"><canvas id="chLand"></canvas></div></div>
+    <div class="panel"><h3>Facility subcategory — top 10 by live MW</h3><div class="chartbox"><canvas id="chSeg"></canvas></div></div>
+    <div class="panel"><h3>Facility status (number of DCs)</h3><div class="chartbox"><canvas id="chStatus"></canvas></div></div>
+    <div class="panel"><h3>Facility type · live vs constr. vs pipeline (MW)</h3><div class="chartbox tall"><canvas id="chCat"></canvas></div></div>
+  </div>
+  <div class="panel" style="margin-top:14px"><h3>Facility type glossary — how BNEF classifies data centers</h3>
+    <div style="font-size:13px;line-height:1.6">
+    <p style="margin-bottom:8px">The database uses two levels. <b>Category</b> answers <i>who owns and runs it</i>; <b>Subcategory</b> answers <i>what it is used for</i>. Hyperscaler is not a category here — it appears split across both, as explained below.</p>
+    <div class="stats-grid" style="margin-top:6px">
+      <div>
+        <p style="color:var(--accent);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Colocation — a landlord rents space/power to tenants</p>
+        <p style="margin-bottom:6px"><b>Retail</b>: tenants rent by the rack or cage, sharing a data hall. Many small customers, connectivity-driven. Highest facility count, lowest average size.</p>
+        <p style="margin-bottom:6px"><b>Wholesale</b>: tenants lease whole halls or buildings (typically ≥1 MW), often a single large customer per space. This is where most hyperscaler <i>leased</i> capacity sits — the biggest single block of live MW in the database.</p>
+        <p><b>Build-to-suit</b>: a facility purpose-built and leased to one specific tenant to their spec.</p>
+      </div>
+      <div>
+        <p style="color:var(--accent);font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Self-build — the operator owns and runs it for its own use</p>
+        <p style="margin-bottom:6px"><b>Self-build Public Cloud</b>: owned cloud-region campuses (the hyperscalers' <i>owned</i> estate — AWS, Azure, Google, Oracle).</p>
+        <p style="margin-bottom:6px"><b>Self-build Social Media / AI / Content / Crypto / HPC</b>: owned by the end-user for that workload (e.g. Meta social media; AI training campuses).</p>
+        <p><b>Self-build Network & Telco / Financial / Public Sector / SI-MSP</b>: owned by telcos, banks, governments or IT-service firms for internal needs.</p>
+      </div>
+    </div>
+    <p style="margin-top:10px;color:var(--dim);font-size:12px"><b>So where are the hyperscalers?</b> A hyperscaler (AWS, Microsoft, Google, Meta, Oracle) is a <i>company type</i>, not a facility type. Their footprint is split: owned campuses show up as <i>Self-build Public Cloud</i> (or Social Media / AI), while the capacity they <i>lease</i> from colocation landlords shows up as <i>Wholesale</i>. To see a hyperscaler's full footprint, filter by company in tab 01 rather than by facility type.</p>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:14px"><h3>Country × company — top 20 combinations by live MW</h3>
+    <div style="overflow-x:auto"><table id="crossTable"><thead><tr><th>Country</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Constr. MW</th><th class="num" title="BNEF Pipeline">BNEF Pipeline MW</th><th class="num">Land (ha)</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
 </section>
 
 <!-- ================= TAB 3: RAMP-UPS ================= -->
