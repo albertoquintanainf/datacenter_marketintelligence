@@ -365,7 +365,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   <!-- Panel: comparativa hyperscalers por país (matriz color por empresa) — antes en tab Map -->
   <div class="panel" style="margin-top:14px">
     <h3>Hyperscaler footprint by country · live MW</h3>
-    <p style="font-size:12px;color:var(--dim);margin-bottom:8px">Each row is a hyperscaler with its brand color; each column is a country (top 15 by hyperscaler live capacity). Empty cells = no BNEF-recorded capacity for that combination. This view ignores the map filters — always shows all hyperscalers.</p>
+    <p style="font-size:12px;color:var(--dim);margin-bottom:8px">Each row is a hyperscaler with its brand color; each column is a country where any of the 10 hyperscalers has presence (ordered by hyperscaler live MW). Empty cells = no BNEF-recorded live capacity for that combination. Click a company name to open its profile. This view ignores the map filters — always shows all hyperscalers.</p>
     <div style="overflow-x:auto;max-height:520px"><table id="hyperCompareTable">
       <thead></thead>
       <tbody id="hyperCompareBody"></tbody>
@@ -2770,8 +2770,8 @@ function renderHyperCompare(){
     agg[key].live+=r[C.live]||0; agg[key].uc+=r[C.uc]||0; agg[key].pipe+=r[C.pipeline]||0;
     countries[mk] = (countries[mk]||0) + (r[C.live]||0);
   });
-  // top 15 países por live capacity total de hyperscalers
-  var topCountries = Object.entries(countries).sort(function(a,b){return b[1]-a[1];}).slice(0,15).map(function(x){return x[0];});
+  // TODOS los países donde los hyperscalers tienen presencia (ordenados por live MW desc)
+  var topCountries = Object.entries(countries).sort(function(a,b){return b[1]-a[1];}).map(function(x){return x[0];});
   // solo hyperscalers CON alguna capacidad
   var hyperWithData = hyperList.filter(function(co){
     return rowsAll.some(function(r){ return r[C.company]===co; });
@@ -2790,7 +2790,7 @@ function renderHyperCompare(){
   hyperWithData.forEach(function(co){
     var color = HYPER_COLORS[co] || '#999';
     var totLive = rowsAll.filter(function(r){return r[C.company]===co;}).reduce(function(s,r){return s+(r[C.live]||0);},0);
-    html+='<tr><td><span style="display:inline-block;width:12px;height:12px;background:'+color+';border-radius:2px;margin-right:8px;vertical-align:middle"></span><b>'+escapeHTML(co)+'</b></td>';
+    html+='<tr><td><span style="display:inline-block;width:12px;height:12px;background:'+color+';border-radius:2px;margin-right:8px;vertical-align:middle"></span><b class="hyper-co-link" data-co="'+escapeAttr(co)+'" style="cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px">'+escapeHTML(co)+'</b></td>';
     html+='<td class="num"><b>'+fmt(totLive,0)+'</b></td>';
     topCountries.forEach(function(c){
       var k=co+'|'+c;
@@ -2800,6 +2800,9 @@ function renderHyperCompare(){
     html+='</tr>';
   });
   container.innerHTML=html;
+  container.querySelectorAll('.hyper-co-link').forEach(function(el){
+    el.onclick=function(){ if(typeof openCompany==='function') openCompany(el.getAttribute('data-co')); };
+  });
 }
 
 /* ---------- Company profiles tab ---------- */
