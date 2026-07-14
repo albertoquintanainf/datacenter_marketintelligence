@@ -539,7 +539,6 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 <section id="tab-ann" style="display:none">
   <div class="tab-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <button class="btn primary" id="annAddBtn" disabled onclick="openAnnEditor()">+ Add announcement</button>
-    <button class="btn" id="addCompanyBtn" disabled onclick="openAddCompanyModal('', function(){})">+ Add company</button>
     <span id="annCollabStatus" style="color:var(--dim);font-size:12px">Sign in with the shared password to add or edit announcements.</span>
     <button class="btn" onclick="printCurrentTab()" style="margin-left:auto">🖨 Print this tab / save as PDF</button>
   </div>
@@ -570,7 +569,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 6: COMPANY PROFILES ================= -->
 <section id="tab-companies">
-  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
+  <div class="tab-actions"><button class="btn primary" id="addCompanyBtnMain" disabled onclick="openAddCompanyModal('', function(){})">+ Add company</button><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <p class="note"><b>Company profiles directory.</b> Every operator in the BNEF database. Profiles <b>touched by the team</b> (dashboard announcements added/edited by a user) are listed <b>first</b>, most recently touched at the top; the rest follow ordered by live capacity. Click any row to open its full profile.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
     <div><label>Search company</label><input type="text" id="coSearch" placeholder="e.g. Microsoft, Equinix…"></div>
@@ -2436,7 +2435,7 @@ window.deleteAnn = deleteAnn;
       const btn = document.getElementById('annAddBtn');
       const status = document.getElementById('annCollabStatus');
       if(btn) btn.disabled = !auth;
-      const cbtn = document.getElementById('addCompanyBtn'); if(cbtn) cbtn.disabled = !auth;
+      const cbtn = document.getElementById('addCompanyBtnMain'); if(cbtn) cbtn.disabled = !auth;
       if(status){
         if(!window.Collab.ready()) status.textContent = 'Static mode: Supabase is not configured (config.js missing). Editing disabled.';
         else if(!window.Collab.user()) status.textContent = 'Enter the shared password above to add or edit announcements.';
