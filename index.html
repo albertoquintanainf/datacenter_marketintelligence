@@ -1357,6 +1357,7 @@ async function saveFichaEdits(){
   { const tc=document.getElementById('tab-companies'); if(tc && tc.style.display!=='none' && typeof renderCompanies==='function') renderCompanies(); }
   // recargar valores y salir del modo edición
   await loadFichaQualitative();
+  await loadQualActivity();   // registrar la edición en "Team activity"
   toggleFichaEdit(false);
 }
 
@@ -2294,7 +2295,8 @@ window.deleteAnn = deleteAnn;
     await refreshAnnFromCollab();
     syncCollabUI();
     await loadCompanyTypeOverrides();
-    window.addEventListener('collab:signin', ()=>{ loadCompanyTypeOverrides(); });
+    await loadQualActivity();
+    window.addEventListener('collab:signin', ()=>{ loadCompanyTypeOverrides(); loadQualActivity(); });
     // suscripción realtime
     window.Collab.onAnnouncementsChange(async () => { await refreshAnnFromCollab(); });
     // reobservar cambios de sesión
@@ -2369,6 +2371,30 @@ async function loadCompanyTypeOverrides(){
     const t=document.getElementById('tab-companies');
     if(t && t.style.display!=='none' && typeof renderCompanies==='function') renderCompanies();
   }catch(e){ console.warn('[types] overrides failed', e); }
+}
+// Actividad qualitative (ediciones de ficha) agregada por empresa, para la columna "Team activity".
+// Réplica del patrón de loadCompanyTypeOverrides pero SIN filtrar por field_key: cuenta todas las
+// ediciones de campos de ficha y guarda el autor/fecha más recientes por empresa.
+let COMPANY_QUAL_ACTIVITY = {};   // { company: {edits, lastBy, lastAt} }
+async function loadQualActivity(){
+  try{
+    const cli = window.Collab && window.Collab._state && window.Collab._state.client;
+    if(!cli) return;
+    const { data, error } = await cli.from('company_qualitative')
+      .select('company,updated_by,updated_at,field_key');
+    if(error){ console.warn('[qual activity] load', error); return; }
+    const IMPORTS = new Set(['seed@import','research@import']);
+    const m = {};
+    (data||[]).forEach(r=>{
+      if(!r.company || !r.updated_by || IMPORTS.has(r.updated_by)) return;
+      const a = m[r.company] || (m[r.company] = {edits:0, lastBy:null, lastAt:null});
+      a.edits++;
+      if(!a.lastAt || String(r.updated_at) > String(a.lastAt)){ a.lastAt = r.updated_at; a.lastBy = r.updated_by; }
+    });
+    COMPANY_QUAL_ACTIVITY = m;
+    const t=document.getElementById('tab-companies');
+    if(t && t.style.display!=='none' && typeof renderCompanies==='function') renderCompanies();
+  }catch(e){ console.warn('[qual activity] failed', e); }
 }
 function mapScoped(){ // filas con los filtros propios del mapa (independientes de la base de datos)
   const co=(els('mapCompany')?els('mapCompany').value.trim().toLowerCase():'');
@@ -2878,6 +2904,14 @@ function renderCompanies(){
       const t=x._updated_at||x.date||'';
       if(!a.lastAt || String(t)>String(a.lastAt)){ a.lastAt=t; a.lastBy=who; }
     }
+  });
+
+  // fusionar la actividad de ediciones de ficha (company_qualitative) en el mismo mapa
+  Object.keys(COMPANY_QUAL_ACTIVITY||{}).forEach(co=>{
+    const q = COMPANY_QUAL_ACTIVITY[co]; if(!q) return;
+    const a = act[co] || (act[co] = {anns:0, userEdits:0, lastBy:null, lastAt:null});
+    a.userEdits += q.edits;
+    if(!a.lastAt || String(q.lastAt) > String(a.lastAt)){ a.lastAt = q.lastAt; a.lastBy = q.lastBy; }
   });
 
   let rows=Object.keys(map).map(co=>{
