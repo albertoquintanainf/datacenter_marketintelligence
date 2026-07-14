@@ -951,7 +951,7 @@ function buildCompanyFicha(name, scope){
   const shareLbl = scope ? `% of ${scopeLabel} total in database` : `% of world total in database`;
   const cityHint = scope ? ` in ${scopeLabel}` : '';
   const rows=[
-    ['1. Company Overview','Company type',companyTypeLabel(name),'Hyperscaler / Neocloud / Colocation — classified by this dashboard (by operator name), not by BNEF'],
+    ['1. Company Overview','Company type',companyTypeLabel(name),'Hyperscaler / Neocloud / Colocation — auto-classified by operator name; editable & saved per company','company_type'],
     ['1. Company Overview','Business description and cloud market position',null,'Understand strategic importance and financial capacity','business_description'],
     ['1. Company Overview',`Position in BNEF database (${scopeLabel})`,`${fmt(live,0)} MW live (${totalLive?(100*live/totalLive).toFixed(1):'—'}${'%'} — ${shareLbl}) · ${oper} operational DCs of ${rs.length} recorded${cityHint}`,'Calculated from database'],
     ['1. Company Overview','Main business drivers (proxy: BNEF segments)',topSeg.length?topSeg.map(([s,v])=>`${s}: ${fmt(v,0)} MW`).join(' · '):null,'Determines future DC demand and type of client'],
@@ -1222,6 +1222,17 @@ async function loadFichaQualitative(){
       metaEl.innerHTML = `Last edited by <b>${escapeHTML(row.updated_by)}</b> on ${fmtWhen(row.updated_at)}`;
     }
   });
+  // company_type es atributo de EMPRESA (scope global): usar el override global para que
+  // sea consistente en cualquier perspectiva y con el listado.
+  const _ct = COMPANY_TYPE_OVERRIDE[f.name];
+  if(_ct && _ct.value){
+    fichaQualitativeCache['company_type'] = { field_key:'company_type', value:_ct.value, updated_by:_ct.updated_by, updated_at:_ct.updated_at };
+    const ctRow = document.querySelector('.fw-row[data-fk="company_type"]');
+    if(ctRow){
+      const v=ctRow.querySelector('.v-content'); if(v) v.innerHTML = escapeHTML(_ct.value);
+      const mm=ctRow.querySelector('.v-meta'); if(mm && _ct.updated_by) mm.innerHTML = `Last edited by <b>${escapeHTML(_ct.updated_by)}</b> on ${fmtWhen(_ct.updated_at)}`;
+    }
+  }
   // mostrar el bloque de controles si Collab está autorizado
   if(window.Collab.isAuthorized && window.Collab.isAuthorized()){
     const ctrl = document.getElementById('fichaEditControls');
@@ -1251,12 +1262,23 @@ function toggleFichaEdit(on){
     if(on){
       const cur = fichaQualitativeCache[fk];
       const currentVal = cur && cur.value ? cur.value : '';
-      valEl.innerHTML = `<textarea class="fw-edit-ta" data-edit-fk="${fk}" rows="3" style="width:100%;font-family:inherit;font-size:inherit;padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;box-sizing:border-box">${escapeHTML(currentVal)}</textarea>`;
+      if(fk==='company_type'){
+        const autoLbl = currentFicha ? companyTypeLabel(currentFicha.name) : '';
+        const selVal = currentVal || autoLbl;
+        const opts = ['Hyperscaler','Neocloud','Colocation','Other / unclassified'];
+        valEl.innerHTML = '<select class="fw-edit-sel" data-edit-fk="company_type" style="font-family:inherit;font-size:inherit;padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;box-sizing:border-box">'
+          + opts.map(o=>`<option value="${escapeAttr(o)}"${o===selVal?' selected':''}>${escapeHTML(o)}</option>`).join('')
+          + '</select>';
+      } else {
+        valEl.innerHTML = `<textarea class="fw-edit-ta" data-edit-fk="${fk}" rows="3" style="width:100%;font-family:inherit;font-size:inherit;padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;box-sizing:border-box">${escapeHTML(currentVal)}</textarea>`;
+      }
     } else {
       // restaurar valor original
       const cur = fichaQualitativeCache[fk];
       if(cur && cur.value){
         valEl.innerHTML = escapeHTML(cur.value).replace(/\n/g,'<br>');
+      } else if(fk==='company_type'){
+        valEl.innerHTML = escapeHTML(currentFicha ? companyTypeLabel(currentFicha.name) : '');
       } else {
         valEl.innerHTML = '<span class="na">Pending — requires qualitative analysis</span>';
       }
@@ -1279,6 +1301,14 @@ async function saveFichaEdits(){
     const oldVal = cur && cur.value ? cur.value : '';
     if(newVal !== oldVal) changes.push({ fk, value: newVal || null });
   });
+  // Desplegables (p. ej. Company type)
+  Array.from(document.querySelectorAll('select.fw-edit-sel')).forEach(sel=>{
+    const fk = sel.getAttribute('data-edit-fk');
+    const newVal = (sel.value||'').trim();
+    const cur = fichaQualitativeCache[fk];
+    const oldVal = cur && cur.value ? cur.value : '';
+    if(newVal !== oldVal) changes.push({ fk, value: newVal || null });
+  });
   if(!changes.length){
     toggleFichaEdit(false);
     return;
@@ -1288,7 +1318,8 @@ async function saveFichaEdits(){
   let errs = 0;
   for(const ch of changes){
     try{
-      await window.Collab.upsertQualitative(f.name, scope, ch.fk, ch.value);
+      const useScope = ch.fk==='company_type' ? COMPANY_TYPE_SCOPE : scope;
+      await window.Collab.upsertQualitative(f.name, useScope, ch.fk, ch.value);
     }catch(e){
       console.error('save failed', ch.fk, e);
       errs++;
@@ -1298,6 +1329,13 @@ async function saveFichaEdits(){
   if(errs){
     alert(`${errs} field(s) failed to save. See console for details.`);
   }
+  // reflejar cambios de tipo de empresa en el mapa global y refrescar el listado
+  const _who = (window.Collab.user && window.Collab.user()) ? window.Collab.user().name : '';
+  changes.forEach(ch=>{ if(ch.fk==='company_type'){
+    if(ch.value) COMPANY_TYPE_OVERRIDE[f.name] = { value: ch.value, updated_by:_who, updated_at:new Date().toISOString() };
+    else delete COMPANY_TYPE_OVERRIDE[f.name];
+  }});
+  { const tc=document.getElementById('tab-companies'); if(tc && tc.style.display!=='none' && typeof renderCompanies==='function') renderCompanies(); }
   // recargar valores y salir del modo edición
   await loadFichaQualitative();
   toggleFichaEdit(false);
@@ -1306,7 +1344,7 @@ async function saveFichaEdits(){
 async function openFieldHistoryModal(fk){
   if(!window.Collab || !window.Collab.ready) return;
   const f = currentFicha;
-  const scope = currentFichaScopeKey();
+  const scope = (fk==='company_type') ? COMPANY_TYPE_SCOPE : currentFichaScopeKey();
   const history = await window.Collab.listFieldHistory(f.name, scope, fk).catch(()=>[]);
   const rowMeta = currentFicha.rows.find(r=>r.fk===fk);
   const title = rowMeta ? rowMeta.crit : fk;
@@ -2229,6 +2267,8 @@ window.deleteAnn = deleteAnn;
     // Refrescar al inicializar y ante cambios de sesión
     await refreshAnnFromCollab();
     syncCollabUI();
+    await loadCompanyTypeOverrides();
+    window.addEventListener('collab:signin', ()=>{ loadCompanyTypeOverrides(); });
     // suscripción realtime
     window.Collab.onAnnouncementsChange(async () => { await refreshAnnFromCollab(); });
     // reobservar cambios de sesión
@@ -2284,6 +2324,26 @@ function companyTypeOf(name){
 const COMPANY_TYPE_LABEL = { hyper:'Hyperscaler', neo:'Neocloud', colo:'Colocation', '':'Other / unclassified' };
 const COMPANY_TYPE_COLOR = { hyper:'#c85512', neo:'#2b7a78', colo:'#3a3a3c', '':'#8a8178' };
 function companyTypeLabel(name){ return COMPANY_TYPE_LABEL[companyTypeOf(name)||'']; }
+
+// Overrides editables del tipo de empresa (atributo de EMPRESA -> se guarda en scope canónico global)
+const COMPANY_TYPE_SCOPE = 'G:Global';
+const LABEL_TO_TYPE = { 'Hyperscaler':'hyper', 'Neocloud':'neo', 'Colocation':'colo' }; // 'Other / unclassified' -> null
+let COMPANY_TYPE_OVERRIDE = {};   // { company: {value, updated_by, updated_at} }
+async function loadCompanyTypeOverrides(){
+  try{
+    const cli = window.Collab && window.Collab._state && window.Collab._state.client;
+    if(!cli) return;
+    const { data, error } = await cli.from('company_qualitative')
+      .select('company,value,updated_by,updated_at')
+      .eq('field_key','company_type').eq('scope', COMPANY_TYPE_SCOPE);
+    if(error){ console.warn('[types] load overrides', error); return; }
+    const m = {};
+    (data||[]).forEach(r=>{ if(r.company && r.value) m[r.company] = { value:r.value, updated_by:r.updated_by, updated_at:r.updated_at }; });
+    COMPANY_TYPE_OVERRIDE = m;
+    const t=document.getElementById('tab-companies');
+    if(t && t.style.display!=='none' && typeof renderCompanies==='function') renderCompanies();
+  }catch(e){ console.warn('[types] overrides failed', e); }
+}
 function mapScoped(){ // filas con los filtros propios del mapa (independientes de la base de datos)
   const co=(els('mapCompany')?els('mapCompany').value.trim().toLowerCase():'');
   const ct=(els('mapCompanyType')?els('mapCompanyType').value:'');
@@ -2798,6 +2858,8 @@ function renderCompanies(){
     m.topCountries = Object.keys(m.countries).map(k=>[k,m.countries[k]]).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]);
     m.type = (typeof companyTypeOf==='function') ? companyTypeOf(co) : null;
     m.typeLbl = COMPANY_TYPE_LABEL[m.type||''];
+    const _ovr = COMPANY_TYPE_OVERRIDE[co];
+    if(_ovr && _ovr.value){ m.typeLbl = _ovr.value; m.type = LABEL_TO_TYPE[_ovr.value] || null; }
     const a=act[co]||{};
     m.anns=a.anns||0; m.userEdits=a.userEdits||0; m.lastBy=a.lastBy||null; m.lastAt=a.lastAt||null;
     return m;
