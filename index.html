@@ -75,6 +75,8 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:stretch}
 .tb-group{display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--line,#e2e2e2);border-radius:6px;background:#fafafa}
 .tb-group .tb-label{font-family:var(--mono,monospace);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#999;margin-right:2px;white-space:nowrap}
+.tb-group .tb-links{font-size:11px;color:var(--dim,#888);align-self:center}
+.tb-group .tb-links .rl{margin:0 1px}
 .fw-cat{margin-bottom:18px}
 .fw-cat h4{font-family:var(--mono);font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;border-bottom:2px solid var(--line);padding-bottom:6px;margin-bottom:8px}
 .fw-row{display:grid;grid-template-columns:270px 1fr;gap:12px;padding:6px 0;border-bottom:1px dashed #e3e8ee;font-size:13px}
@@ -150,6 +152,10 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-ficha .modal{ position:static !important; inset:auto !important; display:block !important; background:#fff; padding:0; overflow:visible; }
   body.print-ficha .sheet{ box-shadow:none !important; border:none !important; max-width:100% !important; padding:0 !important; }
   body.print-ficha .sheet .close, body.print-ficha .toolbar, body.print-ficha .fTabBar{ display:none !important; }
+  /* En PDF: ocultar el "Last edited by…" por campo (dificulta la lectura) y los controles de edición;
+     el autor que exporta se mantiene en el #printHeader. */
+  body.print-ficha .v-meta, body.print-sheet .v-meta{ display:none !important; }
+  body.print-ficha .no-print, body.print-sheet .no-print, body.print-tab .no-print{ display:none !important; }
   body.print-ficha .fTab-hidden{ display:block !important; }
   body.print-ficha .fTabPrintTitle{
     display:block !important;
@@ -1045,18 +1051,24 @@ function renderCompanyModal(){
   });
   body+='</div>';
   const q = encodeURIComponent(f.name+(f.market?' '+f.market:''));
+  const countryOpts = '<option value="">Select a country…</option>' + uniq('market').map(m=>`<option value="${escapeAttr(m)}">${escapeHTML(m)}</option>`).join('');
   const html=`
   <h2>${f.name}${f.market?` <span style="color:#f47220">· ${f.market} view</span>`:''}</h2>
   <div class="sub">Company profile · ${f.rs.length} data centers in BNEF database · ${DATA.meta.date}${f.scope&&f.scope.kind==='G'?' · «'+f.market+'» is a curated market list (see footer note)':''}</div>
   <div class="toolbar">
     <div class="tb-group">
       <span class="tb-label">Export files</span>
-      <button class="btn" onclick="downloadFichaXLSX()">⬇ Excel</button>
       <button class="btn" onclick="printSheet()">🖨 PDF</button>
     </div>
     <div class="tb-group">
       <span class="tb-label">Research help</span>
       <button class="btn" onclick="copyResearchPrompt()">📋 Copy research prompt</button>
+      <span class="tb-links">Manual searches:
+        <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+strategy+MW+investment">DC strategy</a> ·
+        <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+PPA+renewable+energy+data+center">energy / PPAs</a> ·
+        <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+investor+relations+annual+report">annual report / IR</a> ·
+        <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+construction+announcement">recent announcements</a>
+      </span>
     </div>
     <div class="tb-group" id="fichaEditControls" style="display:none">
       <span class="tb-label">Edit &amp; history</span>
@@ -1072,13 +1084,16 @@ function renderCompanyModal(){
 
   <div class="fTab" data-ftab="perfil">
     <div class="fTabPrintTitle">1 · Profile & comments</div>
-    <div class="mini" style="margin-bottom:14px">Manual searches:
-      <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+strategy+MW+investment">DC strategy</a>
-      <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+PPA+renewable+energy+data+center">energy / PPAs</a>
-      <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+investor+relations+annual+report">annual report / IR</a>
-      <a class="rl" target="_blank" href="https://www.google.com/search?q=${q}+data+center+construction+announcement">recent announcements</a>
-    </div>
     ${body}
+    <div class="fw-cat" id="countryStratWrap">
+      <h4>Country strategies</h4>
+      <div class="mini no-print" style="margin-bottom:8px;color:var(--dim)">Optional. Add a country to capture its strategy with the same structure as «European / Regional Strategy», including that country's BNEF data when available.</div>
+      <div id="countryStrategies"></div>
+      <div id="addCountryRow" class="no-print" style="display:none;margin-top:10px;gap:6px;align-items:center;flex-wrap:wrap">
+        <select id="addCountrySel" style="padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;font-family:inherit">${countryOpts}</select>
+        <button class="btn" onclick="addCountryStrategyFromSelect()">➕ Add country strategy</button>
+      </div>
+    </div>
   </div>
 
   <div class="fTab fTab-hidden" data-ftab="stats">
@@ -1248,10 +1263,14 @@ async function loadFichaQualitative(){
   // mostrar el bloque de controles si Collab está autorizado
   if(window.Collab.isAuthorized && window.Collab.isAuthorized()){
     const ctrl = document.getElementById('fichaEditControls');
-    if(ctrl) ctrl.style.display = 'inline-flex';
+    if(ctrl) ctrl.style.display = 'flex';
     // mostrar botones de editar (✎) e historial (↻) junto a cada campo editable
     document.querySelectorAll('[data-edit-fk],[data-hist-fk]').forEach(b=> b.style.display='');
+    const acr = document.getElementById('addCountryRow');
+    if(acr) acr.style.display = 'flex';
   }
+  // renderizar los bloques de estrategia por país (una vez cargada la caché)
+  renderCountryStrategies();
 }
 
 function escapeHTML(s){
@@ -1366,13 +1385,120 @@ async function saveFieldEdit(fk){
   }
 }
 
+/* ---------- Fase 2: estrategias por país (misma estructura que «2. European / Regional Strategy») ----------
+ * Cada país añadido replica esa sección acotada al país: campos editables
+ * (Overall strategy, Reasons, Roadmap) + datos de BNEF del país. Los editables se
+ * guardan como field_key compuesto `country::<país>::<sub>` bajo el scope único e
+ * integran el guardado por campo de la Fase 3. La lista de países vive en el campo
+ * `country_perspectives` (JSON).
+ */
+const COUNTRY_STRAT_SUBS = [
+  { key:'overall_strategy',       label:c=>`Overall strategy in ${c} (expansion, sovereignty, AI, cloud regions, edge)` },
+  { key:'reasons_site_selection', label:c=>`Reasons for site selection in ${c} (grid, connectivity, incentives…)` },
+  { key:'public_roadmap',         label:c=>`Public long-term roadmap in ${c}` },
+];
+function countryFieldKey(country, sub){ return 'country::'+country+'::'+sub; }
+function getCountryPerspectives(){
+  const row = fichaQualitativeCache['country_perspectives'];
+  if(!row || !row.value) return [];
+  try{ const a = JSON.parse(row.value); return Array.isArray(a) ? a.filter(Boolean) : []; }catch(_){ return []; }
+}
+function countryDerived(name, country){
+  const rs = R.filter(r=>r[C.company]===name && r[C.market]===country);
+  const live=sum(rs,'live'), uc=sum(rs,'uc'), pipe=sum(rs,'pipeline');
+  const oper=rs.filter(r=>(r[C.live]||0)>0).length;
+  const topLocs = rs.filter(r=>(r[C.live]||0)>0)
+    .sort((a,b)=>(b[C.live]||0)-(a[C.live]||0)).slice(0,6)
+    .map(r=>`${escapeHTML(r[C.name]||'—')} (${fmt(r[C.live],0)} MW)`).join(' · ');
+  const topExp = rs.filter(r=>((r[C.uc]||0)+(r[C.pipeline]||0))>0)
+    .sort((a,b)=>((b[C.uc]||0)+(b[C.pipeline]||0))-((a[C.uc]||0)+(a[C.pipeline]||0))).slice(0,6)
+    .map(r=>`${escapeHTML(r[C.name]||'—')} (${fmt((r[C.uc]||0)+(r[C.pipeline]||0),0)} MW)`).join(' · ');
+  return { nDC:rs.length, oper, live, uc, pipe, topLocs, topExp };
+}
+function renderCountryStrategies(){
+  const wrap = document.getElementById('countryStrategies');
+  if(!wrap || !currentFicha) return;
+  const name = currentFicha.name;
+  const list = getCountryPerspectives();
+  if(!list.length){
+    wrap.innerHTML = '<div class="mini" style="color:var(--dim)">No country strategies yet.</div>';
+    return;
+  }
+  wrap.innerHTML = list.map(country=>{
+    const d = countryDerived(name, country);
+    const cEsc = escapeHTML(country);
+    const ctx = d.nDC
+      ? `Position in BNEF (${cEsc}): ${fmt(d.live,0)} MW live · ${d.oper} operational DC of ${d.nDC} recorded`
+      : `No data in the BNEF database for ${cEsc} — strategy can still be recorded.`;
+    let rows = '';
+    rows += fwRow(COUNTRY_STRAT_SUBS[0].label(cEsc), null, countryFieldKey(country,'overall_strategy'));
+    rows += fwRow(`Priority locations within ${cEsc} (by live MW)`, d.topLocs||null, null);
+    rows += fwRow(`Expansion in ${cEsc} (constr.+pipeline)`, d.topExp || (d.uc+d.pipe ? fmt(d.uc+d.pipe,0)+' MW' : 'No pipeline recorded in database'), null);
+    rows += fwRow(COUNTRY_STRAT_SUBS[1].label(cEsc), null, countryFieldKey(country,'reasons_site_selection'));
+    rows += fwRow(COUNTRY_STRAT_SUBS[2].label(cEsc), null, countryFieldKey(country,'public_roadmap'));
+    return `<div class="fw-cat country-strat-block" data-country="${escapeAttr(country)}" style="margin-top:6px">
+      <h4 style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span>Country strategy · ${cEsc}</span>
+        <button class="btn no-print" data-remove-country="${escapeAttr(country)}" style="font-size:11px;padding:2px 8px">✕ Remove</button>
+      </h4>
+      <div class="mini" style="margin-bottom:8px;color:var(--dim)">${ctx}</div>
+      ${rows}
+    </div>`;
+  }).join('');
+  // hidratar valores editables desde la caché y mostrar botones si autorizado
+  const authorized = !!(window.Collab && window.Collab.isAuthorized && window.Collab.isAuthorized());
+  wrap.querySelectorAll('.fw-row[data-fk]').forEach(el=>{
+    const fk = el.getAttribute('data-fk');
+    const row = fichaQualitativeCache[fk];
+    const valEl = el.querySelector('.v-content');
+    const metaEl = el.querySelector('.v-meta');
+    if(row && row.value && valEl) valEl.innerHTML = escapeHTML(row.value).replace(/\n/g,'<br>');
+    if(row && row.updated_by && metaEl) metaEl.innerHTML = `Last edited by <b>${escapeHTML(row.updated_by)}</b> on ${fmtWhen(row.updated_at)}`;
+  });
+  if(authorized){ wrap.querySelectorAll('[data-edit-fk],[data-hist-fk]').forEach(b=> b.style.display=''); }
+}
+async function persistCountryPerspectives(list){
+  const f = currentFicha;
+  const who = (window.Collab.user && window.Collab.user()) ? window.Collab.user().name : '';
+  const val = JSON.stringify(list);
+  await window.Collab.upsertQualitative(f.name, currentFichaScopeKey(), 'country_perspectives', val);
+  fichaQualitativeCache['country_perspectives'] = { field_key:'country_perspectives', value:val, updated_by:who, updated_at:new Date().toISOString() };
+}
+async function addCountryStrategyFromSelect(){
+  const sel = document.getElementById('addCountrySel');
+  if(!sel || !sel.value) return;
+  const country = sel.value;
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){ alert('You must sign in to save changes.'); return; }
+  const list = getCountryPerspectives();
+  if(list.includes(country)){ sel.value=''; return; }
+  list.push(country);
+  try{ await persistCountryPerspectives(list); }
+  catch(e){ console.error('add country failed', e); alert('Could not add the country. See console.'); return; }
+  sel.value = '';
+  renderCountryStrategies();
+}
+async function removeCountryStrategy(country){
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){ alert('You must sign in to save changes.'); return; }
+  if(!confirm(`Remove the country strategy block for ${country}? The saved text is kept and will reappear if you add ${country} again.`)) return;
+  const list = getCountryPerspectives().filter(c=>c!==country);
+  try{ await persistCountryPerspectives(list); }
+  catch(e){ console.error('remove country failed', e); alert('Could not remove the country. See console.'); return; }
+  renderCountryStrategies();
+}
+function fieldTitle(fk){
+  const rowMeta = currentFicha && currentFicha.rows.find(r=>r.fk===fk);
+  if(rowMeta) return rowMeta.crit;
+  const m = /^country::(.+)::(.+)$/.exec(fk||'');
+  if(m){ const sub = m[2].replace(/_/g,' '); return sub.charAt(0).toUpperCase()+sub.slice(1)+' — '+m[1]; }
+  return fk;
+}
+
 async function openFieldHistoryModal(fk){
   if(!window.Collab || !window.Collab.ready) return;
   const f = currentFicha;
   const scope = (fk==='company_type') ? COMPANY_TYPE_SCOPE : currentFichaScopeKey();
   const history = await window.Collab.listFieldHistory(f.name, scope, fk).catch(()=>[]);
-  const rowMeta = currentFicha.rows.find(r=>r.fk===fk);
-  const title = rowMeta ? rowMeta.crit : fk;
+  const title = fieldTitle(fk);
   let html = `<h3>Field history — ${escapeHTML(title)}</h3>
   <div class="mini">Company: <b>${escapeHTML(f.name)}</b> · Scope: <b>${escapeHTML(scope)}</b></div>`;
   if(!history.length){
@@ -1433,8 +1559,7 @@ async function openCompanyHistoryModal(){
     });
     html += '<div style="max-height:70vh;overflow-y:auto;margin-top:10px">';
     Object.keys(byField).forEach(fk=>{
-      const rowMeta = currentFicha.rows.find(r=>r.fk===fk);
-      const title = rowMeta ? rowMeta.crit : fk;
+      const title = fieldTitle(fk);
       html += `<div class="panel" style="margin-bottom:10px;padding:10px">
         <h4 style="margin:0 0 6px 0">${escapeHTML(title)}</h4>
         ${byField[fk].map(h=>{
@@ -1461,6 +1586,8 @@ document.addEventListener('click', function(e){
   if(sb){ e.preventDefault(); saveFieldEdit(sb.getAttribute('data-save-fk')); return; }
   const cb = e.target.closest('[data-cancel-fk]');
   if(cb){ e.preventDefault(); cancelFieldEdit(cb.getAttribute('data-cancel-fk')); return; }
+  const rc = e.target.closest('[data-remove-country]');
+  if(rc){ e.preventDefault(); removeCountryStrategy(rc.getAttribute('data-remove-country')); return; }
 });
 
 function drawCompanyCharts(f){
