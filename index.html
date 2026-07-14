@@ -1049,9 +1049,7 @@ function renderCompanyModal(){
     <button class="btn" onclick="copyResearchPrompt()">📋 Copy research prompt</button>
     <button class="btn" onclick="printSheet()">🖨 Print / PDF</button>
     <span id="fichaEditControls" style="display:none">
-      <button class="btn" id="btnEditFields" onclick="toggleFichaEdit(true)">✎ Edit fields</button>
-      <button class="btn primary" id="btnSaveFields" onclick="saveFichaEdits()" style="display:none">💾 Save all</button>
-      <button class="btn" id="btnCancelFields" onclick="toggleFichaEdit(false)" style="display:none">✕ Cancel</button>
+      <span class="mini" style="align-self:center;color:#888">✎ Click any field to edit &amp; save it individually</span>
       <button class="btn" id="btnCompanyHistory" onclick="openCompanyHistoryModal()">📜 Full history</button>
     </span>
   </div>
@@ -1191,7 +1189,7 @@ function loadFichaAnnouncements(companyName, scopeStr){
 /* ============================================================
  * FASE 2 · Edición de campos cualitativos en la ficha
  * ============================================================ */
-let fichaEditMode = false;
+/* La edición pasa a ser por campo (Fase 3): sin modo de edición global. */
 let fichaQualitativeCache = {};   // { fk: {value, updated_by, updated_at} }
 
 function currentFichaScopeKey(){
@@ -1240,8 +1238,8 @@ async function loadFichaQualitative(){
   if(window.Collab.isAuthorized && window.Collab.isAuthorized()){
     const ctrl = document.getElementById('fichaEditControls');
     if(ctrl) ctrl.style.display = 'inline-flex';
-    // mostrar botones de historial junto a cada campo editable
-    document.querySelectorAll('[data-hist-fk]').forEach(b=> b.style.display='');
+    // mostrar botones de editar (✎) e historial (↻) junto a cada campo editable
+    document.querySelectorAll('[data-edit-fk],[data-hist-fk]').forEach(b=> b.style.display='');
   }
 }
 
@@ -1250,99 +1248,111 @@ function escapeHTML(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function toggleFichaEdit(on){
-  fichaEditMode = !!on;
-  const btnEdit = document.getElementById('btnEditFields');
-  const btnSave = document.getElementById('btnSaveFields');
-  const btnCanc = document.getElementById('btnCancelFields');
-  if(btnEdit) btnEdit.style.display = on ? 'none' : '';
-  if(btnSave) btnSave.style.display = on ? '' : 'none';
-  if(btnCanc) btnCanc.style.display = on ? '' : 'none';
-  // Para cada campo con data-fk, sustituir el contenido por un textarea (si on) o restaurar (si off)
-  document.querySelectorAll('.fw-row[data-fk]').forEach(el=>{
-    const fk = el.getAttribute('data-fk');
-    const valEl = el.querySelector('.v-content');
-    if(on){
-      const cur = fichaQualitativeCache[fk];
-      const currentVal = cur && cur.value ? cur.value : '';
-      if(fk==='company_type'){
-        const autoLbl = currentFicha ? companyTypeLabel(currentFicha.name) : '';
-        const selVal = currentVal || autoLbl;
-        const opts = ['Hyperscaler','Neocloud','Colocation','Other / unclassified'];
-        valEl.innerHTML = '<select class="fw-edit-sel" data-edit-fk="company_type" style="font-family:inherit;font-size:inherit;padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;box-sizing:border-box">'
-          + opts.map(o=>`<option value="${escapeAttr(o)}"${o===selVal?' selected':''}>${escapeHTML(o)}</option>`).join('')
-          + '</select>';
-      } else {
-        valEl.innerHTML = `<textarea class="fw-edit-ta" data-edit-fk="${fk}" rows="3" style="width:100%;font-family:inherit;font-size:inherit;padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;box-sizing:border-box">${escapeHTML(currentVal)}</textarea>`;
-      }
-    } else {
-      // restaurar valor original
-      const cur = fichaQualitativeCache[fk];
-      if(cur && cur.value){
-        valEl.innerHTML = escapeHTML(cur.value).replace(/\n/g,'<br>');
-      } else if(fk==='company_type'){
-        valEl.innerHTML = escapeHTML(currentFicha ? companyTypeLabel(currentFicha.name) : '');
-      } else {
-        valEl.innerHTML = '<span class="na">Pending — requires qualitative analysis</span>';
-      }
-    }
-  });
+/* ---------- edición POR CAMPO (guardado individual, Fase 3) ----------
+ * Cada campo editable se edita y se guarda por separado. Antes un único
+ * "Save all" convertía todos los campos a la vez y un clic fuera hacía
+ * perder el trabajo; ahora el radio de pérdida es un solo campo.
+ */
+function rowForFk(fk){
+  return Array.from(document.querySelectorAll('.fw-row[data-fk]')).find(el=>el.getAttribute('data-fk')===fk) || null;
 }
 
-async function saveFichaEdits(){
+function fieldInputHTML(fk, currentVal){
+  const st = 'width:100%;font-family:inherit;font-size:inherit;padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;box-sizing:border-box';
+  if(fk==='company_type'){
+    const autoLbl = currentFicha ? companyTypeLabel(currentFicha.name) : '';
+    const selVal = currentVal || autoLbl;
+    const opts = ['Hyperscaler','Neocloud','Colocation','Other / unclassified'];
+    return '<select class="fw-edit-sel" style="'+st+'">'
+      + opts.map(o=>`<option value="${escapeAttr(o)}"${o===selVal?' selected':''}>${escapeHTML(o)}</option>`).join('')
+      + '</select>';
+  }
+  return `<textarea class="fw-edit-ta" rows="3" style="${st}">${escapeHTML(currentVal)}</textarea>`;
+}
+
+// Restaura el valor mostrado de un campo (desde la caché) y su meta "Last edited by…"
+function renderFieldDisplay(fk){
+  const row = rowForFk(fk); if(!row) return;
+  row.classList.remove('fw-editing');
+  const valEl = row.querySelector('.v-content');
+  const cur = fichaQualitativeCache[fk];
+  if(cur && cur.value){
+    valEl.innerHTML = escapeHTML(cur.value).replace(/\n/g,'<br>');
+  } else if(fk==='company_type'){
+    valEl.innerHTML = escapeHTML(currentFicha ? companyTypeLabel(currentFicha.name) : '');
+  } else {
+    valEl.innerHTML = '<span class="na">Pending — requires qualitative analysis</span>';
+  }
+  const metaEl = row.querySelector('.v-meta');
+  if(metaEl) metaEl.innerHTML = (cur && cur.updated_by)
+    ? `Last edited by <b>${escapeHTML(cur.updated_by)}</b> on ${fmtWhen(cur.updated_at)}` : '';
+  const editBtn = row.querySelector('.fw-edit-btn'); if(editBtn) editBtn.style.visibility='';
+}
+
+function startFieldEdit(fk){
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){
+    alert('You must sign in to save changes.'); return;
+  }
+  const row = rowForFk(fk);
+  if(!row || row.classList.contains('fw-editing')) return;
+  row.classList.add('fw-editing');
+  const editBtn = row.querySelector('.fw-edit-btn'); if(editBtn) editBtn.style.visibility='hidden';
+  const cur = fichaQualitativeCache[fk];
+  const currentVal = cur && cur.value ? cur.value : '';
+  const valEl = row.querySelector('.v-content');
+  valEl.innerHTML = fieldInputHTML(fk, currentVal)
+    + `<div class="fw-edit-actions" style="margin-top:6px;display:flex;gap:6px">
+         <button class="btn primary" data-save-fk="${escapeAttr(fk)}">💾 Save</button>
+         <button class="btn" data-cancel-fk="${escapeAttr(fk)}">✕ Cancel</button>
+       </div>`;
+  const inp = valEl.querySelector('.fw-edit-ta, .fw-edit-sel');
+  if(inp){
+    inp.focus();
+    // Atajos: Esc = cancelar; Ctrl/Cmd+Enter = guardar (para no perder trabajo)
+    inp.addEventListener('keydown', ev=>{
+      if(ev.key==='Escape'){ ev.preventDefault(); cancelFieldEdit(fk); }
+      else if((ev.ctrlKey||ev.metaKey) && ev.key==='Enter'){ ev.preventDefault(); saveFieldEdit(fk); }
+    });
+  }
+}
+
+function cancelFieldEdit(fk){ renderFieldDisplay(fk); }
+
+async function saveFieldEdit(fk){
   if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){
     alert('You must sign in to save changes.'); return;
   }
   const f = currentFicha;
-  const scope = currentFichaScopeKey();
-  const tas = Array.from(document.querySelectorAll('textarea.fw-edit-ta'));
-  const changes = [];
-  tas.forEach(ta=>{
-    const fk = ta.getAttribute('data-edit-fk');
-    const newVal = ta.value.trim();
-    const cur = fichaQualitativeCache[fk];
-    const oldVal = cur && cur.value ? cur.value : '';
-    if(newVal !== oldVal) changes.push({ fk, value: newVal || null });
-  });
-  // Desplegables (p. ej. Company type)
-  Array.from(document.querySelectorAll('select.fw-edit-sel')).forEach(sel=>{
-    const fk = sel.getAttribute('data-edit-fk');
-    const newVal = (sel.value||'').trim();
-    const cur = fichaQualitativeCache[fk];
-    const oldVal = cur && cur.value ? cur.value : '';
-    if(newVal !== oldVal) changes.push({ fk, value: newVal || null });
-  });
-  if(!changes.length){
-    toggleFichaEdit(false);
-    return;
-  }
-  const btnSave = document.getElementById('btnSaveFields');
-  if(btnSave){ btnSave.disabled = true; btnSave.textContent = 'Saving…'; }
-  let errs = 0;
-  for(const ch of changes){
-    try{
-      const useScope = ch.fk==='company_type' ? COMPANY_TYPE_SCOPE : scope;
-      await window.Collab.upsertQualitative(f.name, useScope, ch.fk, ch.value);
-    }catch(e){
-      console.error('save failed', ch.fk, e);
-      errs++;
+  const row = rowForFk(fk); if(!row) return;
+  const inp = row.querySelector('.fw-edit-ta, .fw-edit-sel'); if(!inp) return;
+  const newVal = (inp.value||'').trim();
+  const cur = fichaQualitativeCache[fk];
+  const oldVal = cur && cur.value ? cur.value : '';
+  if(newVal === oldVal){ renderFieldDisplay(fk); return; }  // sin cambios
+  const saveBtn = row.querySelector('[data-save-fk]');
+  const cancBtn = row.querySelector('[data-cancel-fk]');
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  if(cancBtn) cancBtn.disabled = true;
+  const useScope = fk==='company_type' ? COMPANY_TYPE_SCOPE : currentFichaScopeKey();
+  try{
+    await window.Collab.upsertQualitative(f.name, useScope, fk, newVal || null);
+    const who = (window.Collab.user && window.Collab.user()) ? window.Collab.user().name : '';
+    const nowIso = new Date().toISOString();
+    fichaQualitativeCache[fk] = { field_key:fk, value:newVal || null, updated_by:who, updated_at:nowIso };
+    if(fk==='company_type'){
+      if(newVal) COMPANY_TYPE_OVERRIDE[f.name] = { value:newVal, updated_by:who, updated_at:nowIso };
+      else delete COMPANY_TYPE_OVERRIDE[f.name];
     }
+    renderFieldDisplay(fk);
+    // refrescar el listado de empresas y la columna Team activity
+    { const tc=document.getElementById('tab-companies'); if(tc && tc.style.display!=='none' && typeof renderCompanies==='function') renderCompanies(); }
+    if(typeof loadQualActivity==='function') await loadQualActivity();
+  }catch(e){
+    console.error('save failed', fk, e);
+    if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = '💾 Save'; }
+    if(cancBtn) cancBtn.disabled = false;
+    alert('Failed to save this field. See console for details.');
   }
-  if(btnSave){ btnSave.disabled = false; btnSave.textContent = '💾 Save all'; }
-  if(errs){
-    alert(`${errs} field(s) failed to save. See console for details.`);
-  }
-  // reflejar cambios de tipo de empresa en el mapa global y refrescar el listado
-  const _who = (window.Collab.user && window.Collab.user()) ? window.Collab.user().name : '';
-  changes.forEach(ch=>{ if(ch.fk==='company_type'){
-    if(ch.value) COMPANY_TYPE_OVERRIDE[f.name] = { value: ch.value, updated_by:_who, updated_at:new Date().toISOString() };
-    else delete COMPANY_TYPE_OVERRIDE[f.name];
-  }});
-  { const tc=document.getElementById('tab-companies'); if(tc && tc.style.display!=='none' && typeof renderCompanies==='function') renderCompanies(); }
-  // recargar valores y salir del modo edición
-  await loadFichaQualitative();
-  await loadQualActivity();   // registrar la edición en "Team activity"
-  toggleFichaEdit(false);
 }
 
 async function openFieldHistoryModal(fk){
@@ -1429,13 +1439,17 @@ async function openCompanyHistoryModal(){
   openSubModal(html);
 }
 
-// Delegación de click para el icono ↻ (field history)
+// Delegación de click: editar (✎), historial (↻), guardar (💾) y cancelar (✕) por campo
 document.addEventListener('click', function(e){
-  const btn = e.target.closest && e.target.closest('[data-hist-fk]');
-  if(btn){
-    e.preventDefault();
-    openFieldHistoryModal(btn.getAttribute('data-hist-fk'));
-  }
+  if(!e.target.closest) return;
+  const hb = e.target.closest('[data-hist-fk]');
+  if(hb){ e.preventDefault(); openFieldHistoryModal(hb.getAttribute('data-hist-fk')); return; }
+  const eb = e.target.closest('[data-edit-fk]');
+  if(eb){ e.preventDefault(); startFieldEdit(eb.getAttribute('data-edit-fk')); return; }
+  const sb = e.target.closest('[data-save-fk]');
+  if(sb){ e.preventDefault(); saveFieldEdit(sb.getAttribute('data-save-fk')); return; }
+  const cb = e.target.closest('[data-cancel-fk]');
+  if(cb){ e.preventDefault(); cancelFieldEdit(cb.getAttribute('data-cancel-fk')); return; }
 });
 
 function drawCompanyCharts(f){
