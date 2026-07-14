@@ -72,7 +72,9 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .sheet .close:hover{color:var(--red);border-color:var(--red)}
 .sheet h2{font-size:20px;margin-bottom:2px;color:var(--navy)}
 .sheet .sub{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:14px}
-.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:stretch}
+.tb-group{display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--line,#e2e2e2);border-radius:6px;background:#fafafa}
+.tb-group .tb-label{font-family:var(--mono,monospace);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#999;margin-right:2px;white-space:nowrap}
 .fw-cat{margin-bottom:18px}
 .fw-cat h4{font-family:var(--mono);font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;border-bottom:2px solid var(--line);padding-bottom:6px;margin-bottom:8px}
 .fw-row{display:grid;grid-template-columns:270px 1fr;gap:12px;padding:6px 0;border-bottom:1px dashed #e3e8ee;font-size:13px}
@@ -81,7 +83,9 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .fw-row .v .na{color:#9aa7b6;font-style:italic}
 .fw-row .v-meta{font-size:11px;color:#7a8698;margin-top:3px;font-style:italic}
 .fw-row .v-meta:empty{display:none}
-.fw-row .c .fw-edit-btn, .fw-row .c .fw-hist-btn{background:none;border:none;cursor:pointer;font-size:11px;opacity:.4;padding:0 2px;margin-left:4px;color:#666}
+.fw-row .c .fw-edit-btn, .fw-row .c .fw-hist-btn{background:none;border:none;cursor:pointer;font-size:11px;padding:0 2px;margin-left:4px}
+.fw-row .c .fw-edit-btn{opacity:1;color:var(--accent,#f47220);font-size:13px}
+.fw-row .c .fw-hist-btn{opacity:.5;color:#666}
 .fw-row .c .fw-edit-btn:hover, .fw-row .c .fw-hist-btn:hover{opacity:1;color:var(--accent)}
 .fw-edit-ta{transition:border-color .12s} .fw-edit-ta:focus{border-color:var(--accent,#f47220);outline:none}
 .chartbox{position:relative;height:300px;min-width:0;max-width:100%}
@@ -908,7 +912,7 @@ function renderSearchKpis(){
 }
 
 /* ---------- fichas ---------- */
-function openModal(html){ els('sheet').innerHTML='<button class="close" onclick="closeModal()">CERRAR ✕</button>'+html; els('modal').classList.add('open'); }
+function openModal(html){ els('sheet').innerHTML='<button class="close" onclick="closeModal()">Close ✕</button>'+html; els('modal').classList.add('open'); }
 function closeModal(){ els('modal').classList.remove('open'); if(window._fichaChart){try{window._fichaChart.destroy();}catch(_){ } window._fichaChart=null;} delete chartBoxes['fichaChart']; ['coChartCountry','coChartSub','coChartCap','coChartCat','coChartAnn'].forEach(id=>{ if(charts[id]){try{charts[id].destroy();}catch(_){ } delete charts[id];} delete chartBoxes[id]; }); }
 els('modal').addEventListener('click',e=>{ if(e.target.id==='modal') closeModal(); });
 
@@ -1045,13 +1049,20 @@ function renderCompanyModal(){
   <h2>${f.name}${f.market?` <span style="color:#f47220">· ${f.market} view</span>`:''}</h2>
   <div class="sub">Company profile · ${f.rs.length} data centers in BNEF database · ${DATA.meta.date}${f.scope&&f.scope.kind==='G'?' · «'+f.market+'» is a curated market list (see footer note)':''}</div>
   <div class="toolbar">
-    <button class="btn primary" onclick="downloadFichaXLSX()">⬇ Download profile (Excel)</button>
-    <button class="btn" onclick="copyResearchPrompt()">📋 Copy research prompt</button>
-    <button class="btn" onclick="printSheet()">🖨 Print / PDF</button>
-    <span id="fichaEditControls" style="display:none">
-      <span class="mini" style="align-self:center;color:#888">✎ Click any field to edit &amp; save it individually</span>
+    <div class="tb-group">
+      <span class="tb-label">Export files</span>
+      <button class="btn" onclick="downloadFichaXLSX()">⬇ Excel</button>
+      <button class="btn" onclick="printSheet()">🖨 PDF</button>
+    </div>
+    <div class="tb-group">
+      <span class="tb-label">Research help</span>
+      <button class="btn" onclick="copyResearchPrompt()">📋 Copy research prompt</button>
+    </div>
+    <div class="tb-group" id="fichaEditControls" style="display:none">
+      <span class="tb-label">Edit &amp; history</span>
+      <span class="mini" style="align-self:center;color:#888">✎ Click any field to edit it</span>
       <button class="btn" id="btnCompanyHistory" onclick="openCompanyHistoryModal()">📜 Full history</button>
-    </span>
+    </div>
   </div>
   <div class="fTabBar">
     <button type="button" class="fTabBtn active" data-ftab="perfil" onclick="fichaTab('perfil',this)">Profile & comments</button>
