@@ -84,12 +84,14 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .fw-row .c .fw-edit-btn, .fw-row .c .fw-hist-btn{background:none;border:none;cursor:pointer;font-size:11px;opacity:.4;padding:0 2px;margin-left:4px;color:#666}
 .fw-row .c .fw-edit-btn:hover, .fw-row .c .fw-hist-btn:hover{opacity:1;color:var(--accent)}
 .fw-edit-ta{transition:border-color .12s} .fw-edit-ta:focus{border-color:var(--accent,#f47220);outline:none}
-.chartbox{position:relative;height:300px}
+.chartbox{position:relative;height:300px;min-width:0;max-width:100%}
+.chartbox canvas{max-width:100%!important}
 .tab-actions{display:flex;justify-content:flex-end;margin:0 0 10px 0}
 .tab-actions .btn{font-size:12px}
 .chartbox.tall{height:380px}
 .chartbox.xtall{height:520px}
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.stats-grid>*{min-width:0}
 @media(max-width:900px){.stats-grid{grid-template-columns:1fr}.fw-row{grid-template-columns:1fr}}
 footer{margin-top:30px;padding:20px 28px;border-top:1px solid var(--line);font-size:11.5px;color:var(--dim);line-height:1.6;background:#fff}
 footer strong{color:var(--txt)}
@@ -98,6 +100,7 @@ footer strong{color:var(--txt)}
 a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 .note{font-size:12px;color:var(--dim);margin-bottom:12px}
 .two{display:grid;grid-template-columns:340px 1fr;gap:14px}
+.two>*{min-width:0}
 @media(max-width:1000px){.two{grid-template-columns:1fr}}
 .rlist{max-height:520px;overflow-y:auto}
 .rlist .it{padding:8px 10px;border-bottom:1px solid #edf0f4;cursor:pointer;font-size:12.5px}
@@ -160,7 +163,9 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-ficha .fTab .panel{ break-inside:auto; }
   body.print-ficha #printHeader{
     display:flex !important; position:static !important; visibility:visible !important;
-    top:auto; left:auto; right:auto; margin-bottom:6mm;
+    align-items:center; justify-content:space-between;
+    top:auto; left:auto; right:auto;
+    padding:0 0 6mm 0; margin-bottom:6mm; border-bottom:1.5px solid #222;
   }
   body.print-ficha #printHeader *{ visibility:visible !important; }
 
@@ -177,6 +182,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-tab main{ padding:0; }
 
   /* --- Header de impresión (logo + "Generado por") --- */
+  #collabBar{ display:none !important; }
   #printHeader{ display:none; }
   body.print-tab #printHeader,
   body.print-sheet #printHeader{
@@ -243,8 +249,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   /* Gráficas y canvas: ancho de página, alto legible; evitar que se corten */
   body.print-tab .chartbox,
   body.print-tab .chartbox.tall,
-  body.print-tab .chartbox.xtall,
-  body.print-ficha .chartbox{
+  body.print-tab .chartbox.xtall{
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
@@ -253,10 +258,21 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     page-break-inside: avoid;
     break-inside: avoid;
   }
-  body.print-tab canvas, body.print-ficha canvas{
+  /* Ficha: gráficas a 2 columnas (como el popup) -> más pequeñas, media anchura */
+  body.print-ficha .chartbox{
+    width: 100% !important; max-width: 100% !important;
+    height: auto !important; min-height: 38mm; max-height: 68mm;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  body.print-tab canvas{
     width: 100% !important;
     height: auto !important;
     max-height: 105mm !important;
+  }
+  body.print-ficha canvas{
+    width: 100% !important;
+    height: auto !important;
+    max-height: 66mm !important;
   }
   /* El mapa de anuncios de la ficha conserva su proporción (no cap de altura),
      si no se achata al recortar la altura. */
@@ -272,8 +288,10 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   /* Paneles/tablas: en dashboard (print-tab) intentan mantenerse enteros;
      en la ficha (print-ficha) NO se fuerzan (evita hojas casi en blanco). */
   body.print-tab .panel, body.print-tab table{ page-break-inside: avoid; break-inside: avoid; }
-  body.print-tab .stats-grid, body.print-ficha .stats-grid{ display:grid !important; grid-template-columns:1fr; gap:6mm; }
-  body.print-tab .stats-grid > *, body.print-ficha .stats-grid > *{ margin-bottom: 8mm; }
+  body.print-tab .stats-grid{ display:grid !important; grid-template-columns:1fr; gap:6mm; }
+  body.print-ficha .stats-grid{ display:grid !important; grid-template-columns:1fr 1fr !important; gap:5mm; }
+  body.print-tab .stats-grid > *{ margin-bottom: 8mm; }
+  body.print-ficha .stats-grid > *{ margin-bottom: 4mm; }
   /* Ajustes tipográficos para papel */
   body.print-tab, body.print-ficha { font-size: 10pt; }
   body.print-tab h3, body.print-ficha h3 { font-size: 11pt; margin: 6mm 0 3mm; }
