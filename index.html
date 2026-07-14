@@ -1803,7 +1803,24 @@ function companyAnnPanelHTML(f){
 function researchPromptText(){
   const f=currentFicha;
   const scope=f.market?` with specific focus on ${f.market}`:'' ;
-  return `Act as an expert data center market analyst. Research on the web and complete the following criteria for the company "${f.name}"${scope}. For each criterion give a concise answer (1-3 sentences, with figures and dates where available) always citing the primary source (annual report, corporate press release, regulator). If you cannot find reliable information, clearly state "Not found" instead of estimating. Distinguish confirmed data from estimates.\n\nPending criteria:\n`+pendingRows().map(r=>`- [${r.cat}] ${r.crit}`).join('\n');
+  let out = `Act as an expert data center market analyst. Research on the web and complete the following criteria for the company "${f.name}"${scope}. For each criterion give a concise answer (1-3 sentences, with figures and dates where available) always citing the primary source (annual report, corporate press release, regulator). If you cannot find reliable information, clearly state "Not found" instead of estimating. Distinguish confirmed data from estimates.\n\nPending criteria:\n`
+    + pendingRows().map(r=>`- [${r.cat}] ${r.crit}`).join('\n');
+  // Perspectivas de país añadidas a la ficha: incluir criterios de estrategia por país (solo los aún vacíos)
+  const countries = (typeof getCountryPerspectives==='function') ? getCountryPerspectives() : [];
+  if(countries.length){
+    let block='';
+    countries.forEach(c=>{
+      const pend = COUNTRY_STRAT_SUBS.filter(s=>{ const row=fichaQualitativeCache[countryFieldKey(c,s.key)]; return !(row&&row.value); });
+      if(!pend.length) return;
+      const d = (typeof countryDerived==='function') ? countryDerived(f.name,c) : null;
+      const ctx = d && d.nDC ? ` (BNEF footprint: ${fmt(d.live,0)} MW live, ${d.nDC} DC recorded in ${c})` : ` (no BNEF footprint recorded in ${c})`;
+      block += `\n\nCountry focus — ${c}${ctx}:\n` + pend.map(s=>`- ${s.label(c)}`).join('\n');
+    });
+    if(block){
+      out += `\n\n---\nThe analyst has added specific country perspectives to this profile. In addition to the above, research and complete these country-specific strategy criteria for this company, citing primary sources and distinguishing confirmed data from estimates:`+block;
+    }
+  }
+  return out;
 }
 function copyResearchPrompt(){
   navigator.clipboard.writeText(researchPromptText()).then(()=>alert('Prompt copied. Paste it into your Claude project (or another AI with web search) to complete the profile with sources.'));
