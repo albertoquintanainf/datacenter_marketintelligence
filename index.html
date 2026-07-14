@@ -1016,19 +1016,13 @@ function allMarketsOf(name){
   return [...s].sort();
 }
 
-function openCompany(name, scopeStr){
-  // default perspective: inherit active country filter, else active region filter
-  if(scopeStr===undefined){
-    const fm=els('fMarket').value, fr=els('fRegion').value;
-    if(fm && allMarketsOf(name).includes(fm)) scopeStr='C:'+fm;
-    else if(fr && R.some(r=>r[C.company]===name && r[C.region]===fr)) scopeStr='R:'+fr;
-    else scopeStr='';
-  }
-  currentFicha = buildCompanyFicha(name, parseScope(scopeStr));
-  currentFicha.scopeStr = scopeStr||'';
+function openCompany(name){
+  // Ficha unificada: siempre a nivel de empresa (sin perspectivas). Cualquier
+  // segundo argumento de scope que llegue de callers antiguos se ignora.
+  currentFicha = buildCompanyFicha(name, null);
+  currentFicha.scopeStr = '';
   renderCompanyModal();
 }
-window.changeFichaScope = sel=>openCompany(currentFicha.name, sel.value);
 window.fichaTab = function(name, btn){
   const sheet = els('sheet'); if(!sheet) return;
   sheet.querySelectorAll('.fTab').forEach(d=>d.classList.toggle('fTab-hidden', d.getAttribute('data-ftab')!==name));
@@ -1047,20 +1041,10 @@ function renderCompanyModal(){
   });
   body+='</div>';
   const q = encodeURIComponent(f.name+(f.market?' '+f.market:''));
-  const sel = f.scopeStr||'';
-  const comRegions = [...new Set(f.allRs.map(r=>r[C.region]).filter(Boolean))].sort();
-  const comGeos = Object.keys(GEOS).filter(g=>f.allRs.some(r=>GEOS[g].has(r[C.market])));
-  const scopeOpts = ['<option value="">Global</option>',
-    '<optgroup label="Regions">', ...comRegions.map(g=>`<option value="R:${g}" ${sel==='R:'+g?'selected':''}>${g}</option>`), '</optgroup>',
-    '<optgroup label="Geographies">', ...comGeos.map(g=>`<option value="G:${g}" ${sel==='G:'+g?'selected':''}>${g}</option>`), '</optgroup>',
-    '<optgroup label="Countries">', ...allMarketsOf(f.name).map(m=>`<option value="C:${m}" ${sel==='C:'+m?'selected':''}>${m}</option>`), '</optgroup>'
-  ].join('');
   const html=`
   <h2>${f.name}${f.market?` <span style="color:#f47220">· ${f.market} view</span>`:''}</h2>
   <div class="sub">Company profile · ${f.rs.length} data centers in BNEF database · ${DATA.meta.date}${f.scope&&f.scope.kind==='G'?' · «'+f.market+'» is a curated market list (see footer note)':''}</div>
   <div class="toolbar">
-    <label class="mini" style="align-self:center">Perspective:</label>
-    <select style="width:auto" onchange="changeFichaScope(this)">${scopeOpts}</select>
     <button class="btn primary" onclick="downloadFichaXLSX()">⬇ Download profile (Excel)</button>
     <button class="btn" onclick="copyResearchPrompt()">📋 Copy research prompt</button>
     <button class="btn" onclick="printSheet()">🖨 Print / PDF</button>
@@ -1211,9 +1195,9 @@ let fichaEditMode = false;
 let fichaQualitativeCache = {};   // { fk: {value, updated_by, updated_at} }
 
 function currentFichaScopeKey(){
-  const f = currentFicha;
-  if(!f) return null;
-  return f.scopeStr || 'G:Global';
+  // Ficha unificada: scope único a nivel de empresa. Se eliminan las perspectivas
+  // (país/región/geografía); todo se lee y se guarda bajo 'G:Global'.
+  return currentFicha ? 'G:Global' : null;
 }
 
 function fmtWhen(iso){
@@ -1693,7 +1677,7 @@ async function downloadFichaXLSX(){
   const wrapC={vertical:'middle',wrapText:true};
 
   // Título (fila 1, fuera de la tabla del template)
-  ws.getCell('B1').value = `${f.name} — ${f.market||'Global'} — BNEF ${DATA.meta.date}`;
+  ws.getCell('B1').value = `${f.name} — BNEF ${DATA.meta.date}`;
   ws.getCell('B1').font = {name:'Aptos Narrow',size:13,bold:true};
 
   // Cabecera fila 3
@@ -1775,7 +1759,7 @@ async function downloadFichaXLSX(){
   ws.getRow(1).height=20; ws.getRow(3).height=16;
   // disclaimer
   const disc=ws.getCell('B38');
-  disc.value=`Quantitative source: BloombergNEF — Data center projects database (${DATA.meta.source}) · ${DATA.meta.date}. Figures computed automatically from the database; verify against primary sources before external use. Redistribution prohibited without BloombergNEF consent. Perspective: ${f.market||'Global'}.`;
+  disc.value=`Quantitative source: BloombergNEF — Data center projects database (${DATA.meta.source}) · ${DATA.meta.date}. Figures computed automatically from the database; verify against primary sources before external use. Redistribution prohibited without BloombergNEF consent.`;
   disc.font={name:'Aptos Narrow',size:9,italic:true,color:{argb:'FF8A8178'}};
   ws.getCell('B38').alignment={wrapText:true,vertical:'top'};
   ws.mergeCells('B38:E38'); ws.getRow(38).height=Math.max(40, Math.ceil(String(disc.value).length/210)*15);
@@ -1799,7 +1783,7 @@ async function downloadFichaXLSX(){
   const blob = new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='Profile_'+f.name.replace(/[^\w\- ]/g,'').replace(/ /g,'_')+'_'+(f.market||'Global').replace(/[^\w\-]/g,'_')+'_Criteria_Framework.xlsx';
+  a.download='Profile_'+f.name.replace(/[^\w\- ]/g,'').replace(/ /g,'_')+'_Criteria_Framework.xlsx';
   a.click(); URL.revokeObjectURL(a.href);
 }
 
