@@ -539,6 +539,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 <section id="tab-ann" style="display:none">
   <div class="tab-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <button class="btn primary" id="annAddBtn" disabled onclick="openAnnEditor()">+ Add announcement</button>
+    <button class="btn" id="addCompanyBtn" disabled onclick="openAddCompanyModal('', function(){})">+ Add company</button>
     <span id="annCollabStatus" style="color:var(--dim);font-size:12px">Sign in with the shared password to add or edit announcements.</span>
     <button class="btn" onclick="printCurrentTab()" style="margin-left:auto">🖨 Print this tab / save as PDF</button>
   </div>
@@ -1297,7 +1298,7 @@ function fieldInputHTML(fk, currentVal){
   if(fk==='company_type'){
     const autoLbl = currentFicha ? companyTypeLabel(currentFicha.name) : '';
     const selVal = currentVal || autoLbl;
-    const opts = ['Hyperscaler','Neocloud','Colocation','Colocation (wholesale)','Colocation (retail)','Enterprise / on-premise','Telecom / carrier','DC developer / infrastructure investor','Edge operator','Crypto / HPC miner','Government / sovereign','Other / unclassified'];
+    const opts = COMPANY_TYPE_OPTS;
     return '<select class="fw-edit-sel" style="'+st+'">'
       + opts.map(o=>`<option value="${escapeAttr(o)}"${o===selVal?' selected':''}>${escapeHTML(o)}</option>`).join('')
       + '</select>';
@@ -2318,6 +2319,12 @@ function openAnnEditor(id){
   const _countryOpts = ['<option value="">— Select country —</option>']
     .concat(_countryNames.map(n=>`<option value="${String(n).replace(/"/g,'&quot;')}"${a.country===n?' selected':''}>${escapeHTML(n)}</option>`))
     .join('');
+  // Empresa: desplegable con todas las existentes (BNEF + manuales). Conserva valor libre antiguo al editar.
+  const _allCos = allCompanyNames();
+  if(a.company && _allCos.indexOf(a.company)<0) _allCos.unshift(a.company);
+  const _companyOpts = ['<option value="">— Select company —</option>']
+    .concat(_allCos.map(n=>`<option value="${escapeAttr(n)}"${a.company===n?' selected':''}>${escapeHTML(n)}</option>`))
+    .join('');
   const modal = document.createElement('div');
   modal.className='modal';
   modal.style.display='flex';
@@ -2334,7 +2341,12 @@ function openAnnEditor(id){
       <h3 style="margin:0 0 14px">${isEdit?'Edit':'Add'} announcement</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px 20px;font-size:13px">
         <label style="grid-column:1/-1">Project *<input id="_ann_project" value="${(a.project||'').replace(/"/g,'&quot;')}" required></label>
-        <label style="grid-column:1/-1">Company / promoters *<input id="_ann_company" value="${(a.company||'').replace(/"/g,'&quot;')}" required></label>
+        <label style="grid-column:1/-1">Company / promoters *
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="_ann_company" required style="flex:1">${_companyOpts}</select>
+            <button type="button" class="btn" onclick="addCompanyFromAnnEditor(this)" style="white-space:nowrap">➕ New company</button>
+          </div>
+        </label>
         <label style="grid-column:1/-1">Country *<select id="_ann_country" required>${_countryOpts}</select>
           <span style="color:var(--dim);font-size:11px">ISO3 set automatically: <b id="_ann_iso3_show">${a.iso3||'—'}</b></span></label>
         <input type="hidden" id="_ann_iso3" value="${a.iso3||''}">
@@ -2424,6 +2436,7 @@ window.deleteAnn = deleteAnn;
       const btn = document.getElementById('annAddBtn');
       const status = document.getElementById('annCollabStatus');
       if(btn) btn.disabled = !auth;
+      const cbtn = document.getElementById('addCompanyBtn'); if(cbtn) cbtn.disabled = !auth;
       if(status){
         if(!window.Collab.ready()) status.textContent = 'Static mode: Supabase is not configured (config.js missing). Editing disabled.';
         else if(!window.Collab.user()) status.textContent = 'Enter the shared password above to add or edit announcements.';
@@ -2436,8 +2449,9 @@ window.deleteAnn = deleteAnn;
     await refreshAnnFromCollab();
     syncCollabUI();
     await loadCompanyTypeOverrides();
+    await loadManualCompanies();
     await loadQualActivity();
-    window.addEventListener('collab:signin', ()=>{ loadCompanyTypeOverrides(); loadQualActivity(); });
+    window.addEventListener('collab:signin', ()=>{ loadCompanyTypeOverrides(); loadManualCompanies(); loadQualActivity(); });
     // suscripción realtime
     window.Collab.onAnnouncementsChange(async () => { await refreshAnnFromCollab(); });
     // reobservar cambios de sesión
@@ -2497,6 +2511,8 @@ function companyTypeLabel(name){ return COMPANY_TYPE_LABEL[companyTypeOf(name)||
 // Overrides editables del tipo de empresa (atributo de EMPRESA -> se guarda en scope canónico global)
 const COMPANY_TYPE_SCOPE = 'G:Global';
 const LABEL_TO_TYPE = { 'Hyperscaler':'hyper', 'Neocloud':'neo', 'Colocation':'colo', 'Colocation (wholesale)':'colo', 'Colocation (retail)':'colo' }; // otras etiquetas -> null (color 'Other')
+// Lista única de tipos de empresa (editor de ficha + alta de empresa manual).
+const COMPANY_TYPE_OPTS = ['Hyperscaler','Neocloud','Colocation','Colocation (wholesale)','Colocation (retail)','Enterprise / on-premise','Telecom / carrier','Energy company','DC developer / infrastructure investor','Edge operator','Crypto / HPC miner','Government / sovereign','Other / unclassified'];
 let COMPANY_TYPE_OVERRIDE = {};   // { company: {value, updated_by, updated_at} }
 async function loadCompanyTypeOverrides(){
   try{
@@ -2513,6 +2529,112 @@ async function loadCompanyTypeOverrides(){
     if(t && t.style.display!=='none' && typeof renderCompanies==='function') renderCompanies();
   }catch(e){ console.warn('[types] overrides failed', e); }
 }
+
+/* ---------- Empresas añadidas manualmente (no presentes en BNEF) ----------
+ * Nuevas entrantes que llegan por anuncios (hyperscalers, neoclouds, energéticas…).
+ * Se persisten en un registro centinela dentro de company_qualitative
+ * (company='__MANUAL_COMPANIES__', field_key='registry', value=JSON) para NO requerir
+ * cambios en collab.js. El tipo de cada empresa usa el override de company_type habitual.
+ */
+const MANUAL_REG_COMPANY = '__MANUAL_COMPANIES__';
+const MANUAL_REG_FIELD = 'registry';
+let MANUAL_COMPANIES = [];   // array de nombres
+function bnefCompanySet(){ const s=new Set(); R.forEach(r=>{ if(r[C.company]) s.add(r[C.company]); }); return s; }
+function allCompanyNames(){
+  const s = bnefCompanySet();
+  MANUAL_COMPANIES.forEach(n=>{ if(n) s.add(n); });
+  return [...s].sort((a,b)=>a.localeCompare(b));
+}
+function companyExists(name){
+  const t = String(name||'').trim().toLowerCase();
+  if(!t) return false;
+  return allCompanyNames().some(c=>c.toLowerCase()===t);
+}
+function refreshCompanyDatalists(){
+  const names = allCompanyNames();
+  const dl = document.getElementById('companyList');
+  if(dl){ dl.innerHTML = names.map(n=>`<option value="${escapeAttr(n)}"></option>`).join(''); }
+}
+async function loadManualCompanies(){
+  try{
+    const cli = window.Collab && window.Collab._state && window.Collab._state.client;
+    if(!cli) return;
+    const { data, error } = await cli.from('company_qualitative')
+      .select('value')
+      .eq('company', MANUAL_REG_COMPANY).eq('scope', COMPANY_TYPE_SCOPE).eq('field_key', MANUAL_REG_FIELD);
+    if(error){ console.warn('[manual companies] load', error); return; }
+    let list=[];
+    if(data && data[0] && data[0].value){ try{ const a=JSON.parse(data[0].value); if(Array.isArray(a)) list=a.filter(Boolean); }catch(_){} }
+    MANUAL_COMPANIES = list;
+    refreshCompanyDatalists();
+    const t=document.getElementById('tab-companies');
+    if(t && t.style.display!=='none' && typeof renderCompanies==='function') renderCompanies();
+  }catch(e){ console.warn('[manual companies] failed', e); }
+}
+async function persistManualCompanies(){
+  await window.Collab.upsertQualitative(MANUAL_REG_COMPANY, COMPANY_TYPE_SCOPE, MANUAL_REG_FIELD, JSON.stringify(MANUAL_COMPANIES));
+}
+function companyTypeOptionsHTML(selected){
+  return COMPANY_TYPE_OPTS.map(o=>`<option value="${escapeAttr(o)}"${o===selected?' selected':''}>${escapeHTML(o)}</option>`).join('');
+}
+function openAddCompanyModal(prefill, onDone){
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){ alert('You must sign in with the shared password to add a company.'); return; }
+  const modal=document.createElement('div'); modal.className='modal'; modal.style.display='flex';
+  modal.innerHTML = `<div class="sheet" style="max-width:min(520px,94vw);width:100%;padding:24px 28px;background:#fff;border-radius:6px">
+    <button class="close" onclick="this.closest('.modal').remove()" style="float:right;background:none;border:none;font-size:22px;cursor:pointer">×</button>
+    <h3 style="margin:0 0 6px">Add a new company</h3>
+    <div class="mini" style="color:var(--dim);margin-bottom:14px">For actors not present in the BNEF facility database (e.g. new entrants coming through announcements).</div>
+    <label style="display:block;margin-bottom:12px;font-weight:500">Company name *
+      <input id="_newco_name" value="${escapeAttr(prefill||'')}" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #cfc7bd;border-radius:5px;font-family:inherit;font-size:14px;margin-top:4px">
+    </label>
+    <label style="display:block;margin-bottom:14px;font-weight:500">Company type
+      <select id="_newco_type" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #cfc7bd;border-radius:5px;font-family:inherit;font-size:14px;margin-top:4px">${companyTypeOptionsHTML('Other / unclassified')}</select>
+    </label>
+    <div id="_newco_err" style="color:#c0392b;font-size:12px;min-height:16px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="this.closest('.modal').remove()">Cancel</button>
+      <button class="btn primary" id="_newco_save">Add company</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  const nameEl = modal.querySelector('#_newco_name'); if(nameEl) nameEl.focus();
+  modal.querySelector('#_newco_save').onclick = async ()=>{
+    const err = modal.querySelector('#_newco_err'); err.textContent='';
+    const name = modal.querySelector('#_newco_name').value.trim();
+    const type = modal.querySelector('#_newco_type').value;
+    if(!name){ err.textContent='Enter a company name.'; return; }
+    if(companyExists(name)){ err.textContent='That company already exists (in BNEF data or already added). Select it from the list instead.'; return; }
+    try{
+      MANUAL_COMPANIES.push(name);
+      await persistManualCompanies();
+      if(type && type!=='Other / unclassified'){
+        const who=(window.Collab.user&&window.Collab.user())?window.Collab.user().name:'';
+        await window.Collab.upsertQualitative(name, COMPANY_TYPE_SCOPE, 'company_type', type);
+        COMPANY_TYPE_OVERRIDE[name] = { value:type, updated_by:who, updated_at:new Date().toISOString() };
+      }
+      refreshCompanyDatalists();
+      if(typeof renderCompanies==='function') renderCompanies();
+      modal.remove();
+      if(typeof onDone==='function') onDone(name);
+    }catch(e){ console.error('add company failed', e); MANUAL_COMPANIES = MANUAL_COMPANIES.filter(n=>n!==name); err.textContent='Save error: '+(e.message||e); }
+  };
+}
+window.openAddCompanyModal = openAddCompanyModal;
+// Alta rápida desde el editor de anuncios: al crearla, la selecciona en el desplegable.
+function addCompanyFromAnnEditor(btn){
+  const sheet = btn && btn.closest ? btn.closest('.modal') : null;
+  openAddCompanyModal('', (name)=>{
+    const sel = sheet ? sheet.querySelector('#_ann_company') : document.getElementById('_ann_company');
+    if(sel){
+      if(!Array.from(sel.options).some(o=>o.value===name)){
+        const opt=document.createElement('option'); opt.value=name; opt.textContent=name; sel.appendChild(opt);
+      }
+      sel.value=name;
+    }
+  });
+}
+window.addCompanyFromAnnEditor = addCompanyFromAnnEditor;
+
 // Actividad qualitative (ediciones de ficha) agregada por empresa, para la columna "Team activity".
 // Réplica del patrón de loadCompanyTypeOverrides pero SIN filtrar por field_key: cuenta todas las
 // ediciones de campos de ficha y guarda el autor/fecha más recientes por empresa.
@@ -3033,6 +3155,8 @@ function renderCompanies(){
     const g=r[C.region]; if(g) m.regions[g]=(m.regions[g]||0)+1;
     const k=r[C.market]; if(k) m.countries[k]=(m.countries[k]||0)+(r[C.live]||0);
   });
+  // empresas añadidas manualmente (sin datos BNEF): fila con 0s para que sean visibles y abribles
+  (MANUAL_COMPANIES||[]).forEach(co=>{ if(co && !map[co]) map[co]={co:co,dc:0,live:0,uc:0,pipe:0,regions:{},countries:{},manual:true}; });
 
   // actividad del equipo (contribuciones de usuarios en anuncios)
   const IMPORTS=new Set(['seed@import','research@import']);
