@@ -534,6 +534,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   </div>
   <p class="note"><b>Prospective layer — announced investments.</b> Manually curated from verifiable sources (press releases, specialised media). This is <b>NOT</b> BNEF-verified capacity: figures are company announcements, some with multi-year horizons, and may never fully materialise. Capex is entered and shown in M€ (millions of euros). Figures are company announcements (some multi-year) that may never fully materialise; verify each against its original source. Phases: land → grid request → permitting → announced → construction → contracted. «Platform» = multi-project investment vehicles (MW not attributable to a single country). Keep both layers separate when quoting figures.</p>
   <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
+    <div><label>Company</label><input type="text" id="annCompany" list="annCompanyList" placeholder="All companies"><datalist id="annCompanyList"></datalist></div>
     <div><label>Scope</label><select id="annScope"><option value="">World</option><option value="eu">Europe only</option></select></div>
     <div><label>Phase</label><select id="annPhase"><option value="">All phases</option></select></div>
     <div><label>Confidence</label><select id="annConf"><option value="">All</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
@@ -2062,10 +2063,12 @@ function annScoped(){
   const sc=els('annScope')?els('annScope').value:'';
   const ph=els('annPhase')?els('annPhase').value:'';
   const cf=els('annConf')?els('annConf').value:'';
+  const co=(els('annCompany')?els('annCompany').value.trim().toLowerCase():'');
   return ANN.filter(a=>{
     if(sc==='eu' && !a.europe) return false;
     if(ph && a.phase!==ph) return false;
     if(cf && a.confidence!==cf) return false;
+    if(co && !((a.company||'').toLowerCase().includes(co))) return false;
     return true;
   });
 }
@@ -2098,6 +2101,10 @@ function renderAnn(){
     { const pg=els('annPager'); if(pg) pg.innerHTML=''; }
     return;
   }
+  // autocompletado del filtro de empresa (empresas presentes en los anuncios)
+  { const dl=els('annCompanyList');
+    if(dl){ const cos=[...new Set(ANN.map(a=>a.company).filter(Boolean))].sort((x,y)=>x.localeCompare(y));
+      dl.innerHTML = cos.map(c=>'<option value="'+escapeAttr(c)+'"></option>').join(''); } }
   const items=annScoped();
   const sort=els('annSort')?els('annSort').value:'capex';
   const sorted=items.slice().sort((a,b)=>{
@@ -2154,6 +2161,7 @@ function renderAnn(){
   const ph=els('annPhase');
   if(ph && ANN.length){ [...new Set(ANN.map(a=>a.phase))].sort().forEach(p=>ph.append(new Option(p,p))); }
   ['annScope','annPhase','annConf','annSort'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('change',()=>{annPage=1;renderAnn();});});
+  { const ec=document.getElementById('annCompany'); if(ec) ec.addEventListener('input',()=>{annPage=1;renderAnn();}); }
 
 /* ---------- Modal editor de anuncios ---------- */
 function openAnnEditor(id){
