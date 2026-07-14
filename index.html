@@ -1044,14 +1044,28 @@ window.fichaTab = function(name, btn){
 
 function renderCompanyModal(){
   const f=currentFicha;
+  const q = encodeURIComponent(f.name+(f.market?' '+f.market:''));
+  const countryOpts = '<option value="">Select a country…</option>' + uniq('market').map(m=>`<option value="${escapeAttr(m)}">${escapeHTML(m)}</option>`).join('');
+  const countryStratHTML = `<div class="fw-cat" id="countryStratWrap">
+      <h4>Country strategies</h4>
+      <div class="mini no-print" style="margin-bottom:8px;color:var(--dim)">Optional. Add a country to capture its strategy with the same structure as «European / Regional Strategy», including that country's BNEF data when available.</div>
+      <div id="countryStrategies"></div>
+      <div id="addCountryRow" class="no-print" style="display:none;margin-top:10px;gap:6px;align-items:center;flex-wrap:wrap">
+        <select id="addCountrySel" style="padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;font-family:inherit">${countryOpts}</select>
+        <button class="btn" onclick="addCountryStrategyFromSelect()">➕ Add country strategy</button>
+      </div>
+    </div>`;
+  const EURO_CAT = '2. European / Regional Strategy';
   let lastCat='', body='';
   f.rows.forEach(r=>{
-    if(r.cat!==lastCat){ if(lastCat)body+='</div>'; body+=`<div class="fw-cat"><h4>${r.cat}</h4>`; lastCat=r.cat; }
+    if(r.cat!==lastCat){
+      if(lastCat){ body+='</div>'; if(lastCat===EURO_CAT) body+=countryStratHTML; }
+      body+=`<div class="fw-cat"><h4>${r.cat}</h4>`; lastCat=r.cat;
+    }
     body+=fwRow(r.crit,r.val,r.fk);
   });
   body+='</div>';
-  const q = encodeURIComponent(f.name+(f.market?' '+f.market:''));
-  const countryOpts = '<option value="">Select a country…</option>' + uniq('market').map(m=>`<option value="${escapeAttr(m)}">${escapeHTML(m)}</option>`).join('');
+  if(lastCat===EURO_CAT) body+=countryStratHTML; // si la europea fuese la última categoría
   const html=`
   <h2>${f.name}${f.market?` <span style="color:#f47220">· ${f.market} view</span>`:''}</h2>
   <div class="sub">Company profile · ${f.rs.length} data centers in BNEF database · ${DATA.meta.date}${f.scope&&f.scope.kind==='G'?' · «'+f.market+'» is a curated market list (see footer note)':''}</div>
@@ -1085,15 +1099,6 @@ function renderCompanyModal(){
   <div class="fTab" data-ftab="perfil">
     <div class="fTabPrintTitle">1 · Profile & comments</div>
     ${body}
-    <div class="fw-cat" id="countryStratWrap">
-      <h4>Country strategies</h4>
-      <div class="mini no-print" style="margin-bottom:8px;color:var(--dim)">Optional. Add a country to capture its strategy with the same structure as «European / Regional Strategy», including that country's BNEF data when available.</div>
-      <div id="countryStrategies"></div>
-      <div id="addCountryRow" class="no-print" style="display:none;margin-top:10px;gap:6px;align-items:center;flex-wrap:wrap">
-        <select id="addCountrySel" style="padding:6px;border:1px solid var(--line,#ccc);border-radius:4px;font-family:inherit">${countryOpts}</select>
-        <button class="btn" onclick="addCountryStrategyFromSelect()">➕ Add country strategy</button>
-      </div>
-    </div>
   </div>
 
   <div class="fTab fTab-hidden" data-ftab="stats">
@@ -1292,7 +1297,7 @@ function fieldInputHTML(fk, currentVal){
   if(fk==='company_type'){
     const autoLbl = currentFicha ? companyTypeLabel(currentFicha.name) : '';
     const selVal = currentVal || autoLbl;
-    const opts = ['Hyperscaler','Neocloud','Colocation','Other / unclassified'];
+    const opts = ['Hyperscaler','Neocloud','Colocation','Colocation (wholesale)','Colocation (retail)','Enterprise / on-premise','Telecom / carrier','DC developer / infrastructure investor','Edge operator','Crypto / HPC miner','Government / sovereign','Other / unclassified'];
     return '<select class="fw-edit-sel" style="'+st+'">'
       + opts.map(o=>`<option value="${escapeAttr(o)}"${o===selVal?' selected':''}>${escapeHTML(o)}</option>`).join('')
       + '</select>';
@@ -2491,7 +2496,7 @@ function companyTypeLabel(name){ return COMPANY_TYPE_LABEL[companyTypeOf(name)||
 
 // Overrides editables del tipo de empresa (atributo de EMPRESA -> se guarda en scope canónico global)
 const COMPANY_TYPE_SCOPE = 'G:Global';
-const LABEL_TO_TYPE = { 'Hyperscaler':'hyper', 'Neocloud':'neo', 'Colocation':'colo' }; // 'Other / unclassified' -> null
+const LABEL_TO_TYPE = { 'Hyperscaler':'hyper', 'Neocloud':'neo', 'Colocation':'colo', 'Colocation (wholesale)':'colo', 'Colocation (retail)':'colo' }; // otras etiquetas -> null (color 'Other')
 let COMPANY_TYPE_OVERRIDE = {};   // { company: {value, updated_by, updated_at} }
 async function loadCompanyTypeOverrides(){
   try{
