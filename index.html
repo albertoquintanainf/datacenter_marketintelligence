@@ -77,6 +77,8 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .tb-group .tb-label{font-family:var(--mono,monospace);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#999;margin-right:2px;white-space:nowrap}
 .tb-group .tb-links{font-size:11px;color:var(--dim,#888);align-self:center}
 .tb-group .tb-links .rl{margin:0 1px}
+.man-badge{display:inline-block;background:#ee6f2c;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;letter-spacing:.5px;vertical-align:middle;margin-left:4px}
+.man-badge-lg{display:inline-block;background:#ee6f2c;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:9px;letter-spacing:.5px;vertical-align:middle}
 .fw-cat{margin-bottom:18px}
 .fw-cat h4{font-family:var(--mono);font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;border-bottom:2px solid var(--line);padding-bottom:6px;margin-bottom:8px}
 .fw-row{display:grid;grid-template-columns:270px 1fr;gap:12px;padding:6px 0;border-bottom:1px dashed #e3e8ee;font-size:13px}
@@ -345,7 +347,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 1: SEARCH ================= -->
 <section id="tab-search" style="display:none">
-  <div class="tab-actions"><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
+  <div class="tab-actions"><button class="btn primary" id="addDCBtn" disabled onclick="openAddDCModal()">+ Add data center</button><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
   <div class="filters">
     <div><label>Company</label><input type="text" id="fCompany" list="companyList" placeholder="All — type to search"><datalist id="companyList"></datalist></div>
     <div><label>Continent / Region</label><select id="fRegion"><option value="">All</option></select></div>
@@ -363,7 +365,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
       <thead><tr>
         <th data-s="company">Company</th><th data-s="name">Data center</th><th data-s="market">Country</th><th data-s="region">Region</th>
         <th data-s="subcategory">Segment</th><th class="num" data-s="headline">Headline MW</th><th class="num" data-s="live">Live MW</th>
-        <th class="num" data-s="uc">En constr. MW</th><th class="num" data-s="pipeline" title="BNEF Pipeline: verified by BNEF, not yet under construction">BNEF Pipeline MW</th><th data-s="firstlive">First live</th>
+        <th class="num" data-s="uc">Under constr. MW</th><th class="num" data-s="pipeline" title="BNEF Pipeline: verified by BNEF, not yet under construction">BNEF Pipeline MW</th><th data-s="firstlive">First live</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -579,7 +581,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   </div>
   <div class="kpis" id="coKpis"></div>
   <div class="panel"><h3 id="coProfTitle">Company profiles</h3>
-    <div style="overflow-x:auto"><table id="coProfTable"><thead><tr><th>#</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr.</th><th class="num">BNEF Pipeline</th><th>Type</th><th>Team activity</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="coProfTable"><thead><tr><th>#</th><th>Company</th><th class="num"># DC</th><th class="num">Live MW</th><th class="num">Under constr.</th><th class="num" title="BNEF pipeline + announced (dashboard). Announced is prospective — shown for reference, not BNEF-verified.">Pipeline</th><th>Type</th><th>Team activity</th></tr></thead><tbody></tbody></table></div>
     <div id="coProfPager" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--dim)"></div>
   </div>
 </section>
@@ -836,7 +838,7 @@ function renderTable(){
     const tr=document.createElement('tr');
     const regcls=(r[C.region]||'').toLowerCase();
     tr.innerHTML=`<td><span class="linklike" data-co="1">${r[C.company]||'—'}</span></td>
-      <td>${r[C.name]||'—'}</td><td>${r[C.market]||'—'}${r[C.usstate]?' · '+r[C.usstate]:''}</td>
+      <td>${r[C.name]||'—'}${r._manual?' <span class="man-badge" title="Added by a user — not in the BNEF database">USER</span>':''}</td><td>${r[C.market]||'—'}${r[C.usstate]?' · '+r[C.usstate]:''}</td>
       <td><span class="tag ${regcls}">${r[C.region]||'—'}</span></td>
       <td>${r[C.subcategory]||r[C.category]||'—'}</td>
       <td class="num">${fmt(r[C.headline])}</td><td class="num">${fmt(r[C.live])}</td>
@@ -1106,7 +1108,7 @@ function renderCompanyModal(){
     ${companyStatsHTML(f)}
     <div class="panel" style="margin-top:6px"><h3>${f.name} facilities${f.market?' in '+f.market:''} (top 30 by live MW)</h3>
       <div style="overflow-x:auto;max-height:280px;overflow-y:auto"><table><thead><tr><th>DC</th><th>Country</th><th class="num">Live</th><th class="num">Constr.</th><th class="num" title="BNEF Pipeline">BNEF Pipe</th><th>First live</th></tr></thead>
-      <tbody>${f.rs.slice().sort((a,b)=>(b[C.live]||0)-(a[C.live]||0)).slice(0,30).map(r=>`<tr onclick='openDCByIdx(${R.indexOf(r)})'><td>${r[C.name]}</td><td>${r[C.market]||''}</td><td class="num">${fmt(r[C.live])}</td><td class="num">${fmt(r[C.uc])}</td><td class="num">${fmt(r[C.pipeline])}</td><td>${r[C.firstlive]||'—'}</td></tr>`).join('')}</tbody></table></div>
+      <tbody>${f.rs.slice().sort((a,b)=>(b[C.live]||0)-(a[C.live]||0)).slice(0,30).map(r=>`<tr onclick='openDCByIdx(${R.indexOf(r)})'><td>${r[C.name]}${r._manual?' <span class="man-badge">USER</span>':''}</td><td>${r[C.market]||''}</td><td class="num">${fmt(r[C.live])}</td><td class="num">${fmt(r[C.uc])}</td><td class="num">${fmt(r[C.pipeline])}</td><td>${r[C.firstlive]||'—'}</td></tr>`).join('')}</tbody></table></div>
     </div>
   </div>
 
@@ -1964,11 +1966,17 @@ async function downloadFichaXLSX(){
 function openDC(r){
   const ser=r[C.series]||[];
   const clusterMates = r[C.cluster]>=0 ? R.filter(x=>x!==r && x[C.cluster]===r[C.cluster]) : [];
+  const isMan = !!r._manual;
+  const srcHtml = isMan ? (/^https?:\/\//.test(r._source||'') ? `<a href="${escapeAttr(r._source)}" target="_blank" rel="noopener" style="color:var(--accent)">${escapeHTML(r._source)}</a>` : (r._source?escapeHTML(r._source):'<span class="na">—</span>')) : '';
+  const manBadge = isMan ? ' <span class="man-badge-lg">USER-ADDED</span>' : '';
+  const manRows = isMan ? (fwRow('Source (user-added)', srcHtml) + fwRow('Added by', (r._addedBy?escapeHTML(r._addedBy):'—')+(r._addedAt?' · '+fmtWhen(r._addedAt):''))) : '';
   const html=`
-  <h2>${r[C.name]||'—'} <span class="mini">· ${r[C.company]||''}</span></h2>
+  <h2>${r[C.name]||'—'}${manBadge} <span class="mini">· ${r[C.company]||''}</span></h2>
   <div class="sub">${r[C.market]||''}${r[C.usstate]?' · '+r[C.usstate]:''} · ${r[C.region]||''} · ${r[C.lat]!=null?r[C.lat]+', '+r[C.lon]:''}</div>
+  ${isMan?'<div class="mini" style="color:#ee6f2c;margin:-4px 0 8px">⚠ Added manually by a user — not part of the BNEF database. Verify against the source.</div>':''}
   <div class="toolbar"><button class="btn" onclick="printSheet()">🖨 Print / save PDF</button></div>
   <div class="fw-cat"><h4>Facility profile</h4>
+    ${manRows}
     ${fwRow('Status · category', `${r[C.status]||'—'} · ${r[C.category]||'—'}${r[C.subcategory]?' / '+r[C.subcategory]:''}`)}
     ${fwRow('Capacity', `Headline ${fmt(r[C.headline])} MW · Live ${fmt(r[C.live])} MW · Under construction ${fmt(r[C.uc])} MW · Other pipeline ${fmt(r[C.pipeline])} MW`)}
     ${fwRow('Electrical power', r[C.mva]!=null?`${fmt(r[C.mva])} MVA total · ${fmt(r[C.itmva])} MVA IT`:NA)}
@@ -2453,6 +2461,7 @@ window.deleteAnn = deleteAnn;
       const status = document.getElementById('annCollabStatus');
       if(btn) btn.disabled = !auth;
       const cbtn = document.getElementById('addCompanyBtnMain'); if(cbtn) cbtn.disabled = !auth;
+      const dbtn = document.getElementById('addDCBtn'); if(dbtn) dbtn.disabled = !auth;
       if(status){
         if(!window.Collab.ready()) status.textContent = 'Static mode: Supabase is not configured (config.js missing). Editing disabled.';
         else if(!window.Collab.user()) status.textContent = 'Enter the shared password above to add or edit announcements.';
@@ -2466,8 +2475,9 @@ window.deleteAnn = deleteAnn;
     syncCollabUI();
     await loadCompanyTypeOverrides();
     await loadManualCompanies();
+    await loadManualDCs();
     await loadQualActivity();
-    window.addEventListener('collab:signin', ()=>{ loadCompanyTypeOverrides(); loadManualCompanies(); loadQualActivity(); });
+    window.addEventListener('collab:signin', ()=>{ loadCompanyTypeOverrides(); loadManualCompanies(); loadManualDCs(); loadQualActivity(); });
     // suscripción realtime
     window.Collab.onAnnouncementsChange(async () => { await refreshAnnFromCollab(); });
     // reobservar cambios de sesión
@@ -2650,6 +2660,136 @@ function addCompanyFromAnnEditor(btn){
   });
 }
 window.addCompanyFromAnnEditor = addCompanyFromAnnEditor;
+
+/* ---------- Data centers añadidos manualmente (no presentes en BNEF) ----------
+ * Se marcan claramente como añadidos por el usuario y llevan FUENTE obligatoria.
+ * Persistidos en un registro centinela dentro de company_qualitative
+ * (company='__MANUAL_DCS__', field_key='registry', value=JSON) — sin tocar collab.js.
+ * Al cargar se construyen como filas con la estructura de R y se fusionan en R
+ * (con _manual/_source/_addedBy/_addedAt) para que entren en tablas, ficha y agregados.
+ */
+const MANUAL_DC_REG_COMPANY = '__MANUAL_DCS__';
+let MANUAL_DCS = [];          // objetos persistidos
+let MANUAL_DC_ROWS = [];      // filas formato-R fusionadas en R (para poder retirarlas al recargar)
+function manualDCToRow(d){
+  const row = new Array(DATA.cols.length).fill(null);
+  row[C.company]=d.company||''; row[C.name]=d.name||''; row[C.market]=d.market||''; row[C.region]=d.region||'';
+  row[C.category]=d.category||''; row[C.subcategory]=d.subcategory||''; row[C.status]=d.status||'';
+  row[C.live]=+d.live||0; row[C.uc]=+d.uc||0; row[C.pipeline]=+d.pipeline||0;
+  row[C.headline]=(+d.live||0)+(+d.uc||0)+(+d.pipeline||0);
+  row[C.firstlive]=d.firstlive||''; row[C.land]=(d.land!=null&&d.land!=='')?+d.land:null;
+  if(d.lat!=null && d.lat!=='') row[C.lat]=+d.lat;
+  if(d.lon!=null && d.lon!=='') row[C.lon]=+d.lon;
+  row[C.cluster]=-1; row[C.series]=[];
+  row._manual=true; row._source=d.source||''; row._addedBy=d.addedBy||''; row._addedAt=d.addedAt||'';
+  return row;
+}
+function rebuildManualDCRows(){
+  MANUAL_DC_ROWS.forEach(row=>{ const i=R.indexOf(row); if(i>=0) R.splice(i,1); });
+  MANUAL_DC_ROWS = (MANUAL_DCS||[]).map(manualDCToRow);
+  MANUAL_DC_ROWS.forEach(row=>R.push(row));
+}
+async function loadManualDCs(){
+  try{
+    const cli = window.Collab && window.Collab._state && window.Collab._state.client;
+    if(!cli) return;
+    const { data, error } = await cli.from('company_qualitative')
+      .select('value')
+      .eq('company', MANUAL_DC_REG_COMPANY).eq('scope', COMPANY_TYPE_SCOPE).eq('field_key', MANUAL_REG_FIELD);
+    if(error){ console.warn('[manual DCs] load', error); return; }
+    let list=[];
+    if(data && data[0] && data[0].value){ try{ const a=JSON.parse(data[0].value); if(Array.isArray(a)) list=a.filter(Boolean); }catch(_){} }
+    MANUAL_DCS = list;
+    rebuildManualDCRows();
+    if(typeof applyFilters==='function') applyFilters();
+    if(typeof renderCompanies==='function') renderCompanies();
+    if(typeof renderMap==='function' && document.getElementById('tab-map') && document.getElementById('tab-map').style.display!=='none') renderMap();
+  }catch(e){ console.warn('[manual DCs] failed', e); }
+}
+async function persistManualDCs(){
+  await window.Collab.upsertQualitative(MANUAL_DC_REG_COMPANY, COMPANY_TYPE_SCOPE, MANUAL_REG_FIELD, JSON.stringify(MANUAL_DCS));
+}
+function addCompanyFromDCEditor(btn){
+  const sheet = btn && btn.closest ? btn.closest('.modal') : null;
+  openAddCompanyModal('', name=>{
+    const sel = sheet ? sheet.querySelector('#_dc_company') : document.getElementById('_dc_company');
+    if(sel){ if(!Array.from(sel.options).some(o=>o.value===name)){ const o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o);} sel.value=name; }
+  });
+}
+window.addCompanyFromDCEditor = addCompanyFromDCEditor;
+function openAddDCModal(prefill){
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){ alert('You must sign in with the shared password to add a data center.'); return; }
+  prefill = prefill||{};
+  const _mapx=(window.__MAPX||{}), _match=_mapx.match||{}, _agg=_mapx.agg||{};
+  const countryNames = Object.keys(_match).sort((x,y)=>x.localeCompare(y));
+  const countryOpts = '<option value="">— Select country —</option>'+countryNames.map(n=>`<option value="${escapeAttr(n)}"${prefill.market===n?' selected':''}>${escapeHTML(n)}</option>`).join('');
+  const companyOpts = '<option value="">— Select company —</option>'+allCompanyNames().map(n=>`<option value="${escapeAttr(n)}"${prefill.company===n?' selected':''}>${escapeHTML(n)}</option>`).join('');
+  const statusOpts = '<option value="">— optional —</option>'+uniq('status').map(s=>`<option value="${escapeAttr(s)}">${escapeHTML(s)}</option>`).join('');
+  const subOpts = '<option value="">— optional —</option>'+uniq('subcategory').map(s=>`<option value="${escapeAttr(s)}">${escapeHTML(s)}</option>`).join('');
+  const modal=document.createElement('div'); modal.className='modal'; modal.style.display='flex';
+  modal.innerHTML = `<div class="sheet annEditSheet" style="max-width:min(760px,94vw);width:100%;padding:24px 28px;background:#fff;border-radius:6px">
+    <style>
+      .annEditSheet label{display:flex;flex-direction:column;gap:5px;font-weight:500;color:#333;font-size:13px}
+      .annEditSheet input,.annEditSheet select{width:100%;box-sizing:border-box;padding:9px 11px;font-size:14px;border:1px solid #cfc7bd;border-radius:5px;font-family:inherit;background:#fff}
+      .annEditSheet select{height:40px}
+    </style>
+    <button class="close" onclick="this.closest('.modal').remove()" style="float:right;background:none;border:none;font-size:22px;cursor:pointer">×</button>
+    <h3 style="margin:0 0 4px">Add a data center</h3>
+    <div class="mini" style="color:var(--dim);margin-bottom:14px">For a facility not in the BNEF database. It will be clearly flagged as user-added, and a source is required.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px 18px">
+      <label style="grid-column:1/-1">Company *
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="_dc_company" style="flex:1">${companyOpts}</select>
+          <button type="button" class="btn" onclick="addCompanyFromDCEditor(this)" style="white-space:nowrap">➕ New company</button>
+        </div>
+      </label>
+      <label style="grid-column:1/-1">Data center name *<input id="_dc_name" value="${escapeAttr(prefill.name||'')}"></label>
+      <label>Country *<select id="_dc_country">${countryOpts}</select></label>
+      <label>Status<select id="_dc_status">${statusOpts}</select></label>
+      <label>Facility type (segment)<select id="_dc_subcat">${subOpts}</select></label>
+      <label>First live (YYYY or YYYY-MM)<input id="_dc_firstlive" placeholder="2026 or 2026-07" value="${escapeAttr(prefill.firstlive||'')}"></label>
+      <label>Live MW<input id="_dc_live" type="number" step="1"></label>
+      <label>Under construction MW<input id="_dc_uc" type="number" step="1"></label>
+      <label>Pipeline MW<input id="_dc_pipeline" type="number" step="1"></label>
+      <label>Land (m²)<input id="_dc_land" type="number" step="1"></label>
+      <label style="grid-column:1/-1">Source * (URL or reference — press release, operator site, specialised media…)<input id="_dc_source" placeholder="https://…" value="${escapeAttr(prefill.source||'')}"></label>
+    </div>
+    <div id="_dc_err" style="color:#c0392b;font-size:12px;min-height:16px;margin:10px 0 4px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="this.closest('.modal').remove()">Cancel</button>
+      <button class="btn primary" id="_dc_save">Add data center</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#_dc_save').onclick = async ()=>{
+    const err=modal.querySelector('#_dc_err'); err.textContent='';
+    const g=id=>{ const el=modal.querySelector('#_dc_'+id); return el?el.value.trim():''; };
+    const company=g('company'), name=g('name'), market=g('country'), source=g('source');
+    if(!company){ err.textContent='Select a company (or add a new one).'; return; }
+    if(!name){ err.textContent='Enter the data center name.'; return; }
+    if(!market){ err.textContent='Select a country.'; return; }
+    if(!source){ err.textContent='A source is required for user-added data centers.'; return; }
+    const dup = R.some(r=>!r._manual && (r[C.name]||'').toLowerCase()===name.toLowerCase() && (r[C.company]||'').toLowerCase()===company.toLowerCase() && (r[C.market]||'').toLowerCase()===market.toLowerCase());
+    if(dup && !confirm('A facility with the same name, company and country already exists in the BNEF database. Add it anyway as a user entry?')) return;
+    const iso3=_match[market]||'';
+    const region=(iso3 && _agg[iso3] && _agg[iso3].region)?_agg[iso3].region:'';
+    const who=(window.Collab.user&&window.Collab.user())?window.Collab.user().name:'';
+    const dc={ name, company, market, region, iso3, status:g('status'), subcategory:g('subcat'), category:'',
+      live:+g('live')||0, uc:+g('uc')||0, pipeline:+g('pipeline')||0, firstlive:g('firstlive'),
+      land:(g('land')!==''?+g('land'):null), source, addedBy:who, addedAt:new Date().toISOString() };
+    try{
+      MANUAL_DCS.push(dc);
+      await persistManualDCs();
+      rebuildManualDCRows();
+      if(typeof applyFilters==='function') applyFilters();
+      if(typeof renderCompanies==='function') renderCompanies();
+      modal.remove();
+      alert('Data center added and flagged as user-added.');
+    }catch(e){ console.error('add DC failed', e); MANUAL_DCS.pop(); err.textContent='Save error: '+(e.message||e); }
+  };
+}
+window.openAddDCModal = openAddDCModal;
+
 
 // Actividad qualitative (ediciones de ficha) agregada por empresa, para la columna "Team activity".
 // Réplica del patrón de loadCompanyTypeOverrides pero SIN filtrar por field_key: cuenta todas las
@@ -2902,7 +3042,10 @@ function openMapCountryDetail(marketName){
   // Si el metric es "Announced", mostrar los anuncios de dashboard para este país
   // (no los DCs BNEF, porque son layers distintos y no se suman).
   if(metric==='ann'){
-    var iso3 = (function(){ for(var i in MAPX){ if(MAPX[i].market===marketName) return i; } return null; })();
+    // ISO3 del país pinchado: nombre->ISO3 directo (MAPX.match). El bucle anterior recorría
+    // MAPX en su primer nivel ({match,agg}), no los ISO3, y devolvía null -> descartaba todo.
+    var iso3 = (MAPX && MAPX.match && MAPX.match[marketName]) || null;
+    if(!iso3 && typeof ANN!=='undefined'){ var _hit=ANN.find(function(a){return a.country===marketName && a.iso3;}); if(_hit) iso3=_hit.iso3; }
     var annsHere = (typeof ANN!=='undefined' ? ANN : []).filter(function(a){
       if(!a.iso3 || a.phase==='platform') return false;
       if(a.iso3 !== iso3) return false;
@@ -3178,8 +3321,9 @@ function renderCompanies(){
   const IMPORTS=new Set(['seed@import','research@import']);
   const act={};
   (typeof ANN!=='undefined'?ANN:[]).forEach(x=>{ const co=x.company; if(!co) return;
-    const a=act[co]||(act[co]={anns:0,userEdits:0,lastBy:null,lastAt:null});
+    const a=act[co]||(act[co]={anns:0,annMw:0,userEdits:0,lastBy:null,lastAt:null});
     a.anns++;
+    if(x.phase!=='platform' && x.mw) a.annMw += x.mw;
     const who=x._updated_by||x._created_by;
     if(who && !IMPORTS.has(who)){ a.userEdits++;
       const t=x._updated_at||x.date||'';
@@ -3206,6 +3350,7 @@ function renderCompanies(){
     if(_ovr && _ovr.value){ m.typeLbl = _ovr.value; m.type = LABEL_TO_TYPE[_ovr.value] || null; }
     const a=act[co]||{};
     m.anns=a.anns||0; m.userEdits=a.userEdits||0; m.lastBy=a.lastBy||null; m.lastAt=a.lastAt||null;
+    m.annMw=a.annMw||0;
     return m;
   });
 
@@ -3249,7 +3394,7 @@ function renderCompanies(){
     '<td class="num">'+r.dc+'</td>'+
     '<td class="num">'+fmt(r.live)+'</td>'+
     '<td class="num">'+fmt(r.uc)+'</td>'+
-    '<td class="num">'+fmt(r.pipe)+'</td>'+
+    '<td class="num" title="BNEF pipeline + announced (dashboard, prospective — not BNEF-verified)">'+fmt((r.pipe||0)+(r.annMw||0))+(r.annMw>0?'<div style="font-size:10px;color:#ee6f2c">incl. '+fmt(r.annMw,0)+' announced</div>':'')+'</td>'+
     '<td><span style="display:inline-block;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600;color:#fff;background:'+(COMPANY_TYPE_COLOR[r.type||''])+'">'+escapeHTML(r.typeLbl)+'</span></td>'+
     '<td style="font-size:11px">'+ (r.userEdits>0
         ? '<span style="color:#1e6b34">✎ '+escapeHTML(r.lastBy||'user')+(r.lastAt?' · '+escapeHTML(String(r.lastAt).slice(0,10)):'')+'</span>'
