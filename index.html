@@ -92,6 +92,9 @@ tbody tr:hover{background:#eef4f6;cursor:pointer}
 .fw-row .c .fw-hist-btn{opacity:.5;color:#666}
 .fw-row .c .fw-edit-btn:hover, .fw-row .c .fw-hist-btn:hover{opacity:1;color:var(--accent)}
 .fw-edit-ta{transition:border-color .12s} .fw-edit-ta:focus{border-color:var(--accent,#f47220);outline:none}
+/* Subapartados dentro de cada bloque de estrategia por país */
+.cs-sub{margin:10px 0 4px}
+.cs-sub h5{font-family:var(--mono);font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--line);padding-bottom:4px;margin:0 0 4px;font-weight:600}
 .chartbox{position:relative;height:300px;min-width:0;max-width:100%}
 .chartbox canvas{max-width:100%!important}
 .tab-actions{display:flex;justify-content:flex-end;margin:0 0 10px 0}
@@ -173,6 +176,13 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-ficha .fw-cat, body.print-ficha .fw-row,
   body.print-ficha .chartbox, body.print-ficha tr{ break-inside:avoid; page-break-inside:avoid; }
   body.print-ficha .fTab .panel{ break-inside:auto; }
+  /* Los bloques de país son largos (4 subapartados): si se fuerza a no cortarse,
+     saltan enteros de página y dejan la anterior en blanco. Se deja fluir el
+     bloque y se mantiene atómico solo el subapartado. */
+  body.print-ficha #countryStratWrap,
+  body.print-ficha .country-strat-block{ break-inside:auto; page-break-inside:auto; }
+  body.print-ficha .cs-sub{ break-inside:avoid; page-break-inside:avoid; break-after:avoid; page-break-after:avoid; }
+  body.print-ficha .cs-group{ break-inside:auto; page-break-inside:auto; }
   body.print-ficha #printHeader{
     display:flex !important; position:static !important; visibility:visible !important;
     align-items:center; justify-content:space-between;
@@ -956,6 +966,16 @@ function parseScope(s){
 
 let currentFicha=null;
 
+/* Categorías de la ficha (orden de lectura). Se centralizan aquí para que el
+ * anclaje de los bloques de país (renderCompanyModal) no dependa de literales. */
+const CAT = {
+  OVERVIEW : '1. Company Overview',
+  PORTFOLIO: '2. Existing Data Center Portfolio',
+  PIPELINE : '3. Development Pipeline',
+  EURO     : '4. European / Regional Strategy',
+  COMMENTS : '5. Comments',
+};
+
 function buildCompanyFicha(name, scope){
   const sf = scopeFilter(scope);
   let rs = R.filter(r=>r[C.company]===name && sf(r));
@@ -971,6 +991,13 @@ function buildCompanyFicha(name, scope){
   });
   const topM=Object.entries(markets).sort((a,b)=>b[1].live-a[1].live);
   const topPipe=Object.entries(markets).sort((a,b)=>(b[1].uc+b[1].pipe)-(a[1].uc+a[1].pipe)).filter(x=>x[1].uc+x[1].pipe>0);
+  /* Sección europea: solo países del set geográfico GEOS['Europe'] (incl. UK/EFTA/
+     Balcanes/Ucrania; excl. Rusia, Turquía y Cáucaso — ver nota del pie). */
+  const isEuroMkt = m => GEOS['Europe'].has(m);
+  const topM_eu   = topM.filter(([m])=>isEuroMkt(m));
+  const topPipe_eu= topPipe.filter(([m])=>isEuroMkt(m));
+  const liveEU    = topM_eu.reduce((a,[,v])=>a+v.live,0);
+  const nDcEU     = topM_eu.reduce((a,[,v])=>a+v.n,0);
   const segs={}; rs.forEach(r=>{const s=r[C.subcategory]||r[C.category]; if(s)segs[s]=(segs[s]||0)+(r[C.live]||0);});
   const topSeg=Object.entries(segs).sort((a,b)=>b[1]-a[1]);
   const years=rs.map(r=>r[C.firstlive]).filter(Boolean).map(f=>parseInt((f.match(/\d{4}/)||[])[0])).filter(Boolean);
@@ -982,43 +1009,32 @@ function buildCompanyFicha(name, scope){
   const shareLbl = scope ? `% of ${scopeLabel} total in database` : `% of world total in database`;
   const cityHint = scope ? ` in ${scopeLabel}` : '';
   const rows=[
-    ['1. Company Overview','Company type',companyTypeLabel(name),'Hyperscaler / Neocloud / Colocation — auto-classified by operator name; editable & saved per company','company_type'],
-    ['1. Company Overview','Business description and cloud market position',null,'Understand strategic importance and financial capacity','business_description'],
-    ['1. Company Overview',`Position in BNEF database (${scopeLabel})`,`${fmt(live,0)} MW live (${totalLive?(100*live/totalLive).toFixed(1):'—'}${'%'} — ${shareLbl}) · ${oper} operational DCs of ${rs.length} recorded${cityHint}`,'Calculated from database'],
-    ['1. Company Overview','Main business drivers (proxy: BNEF segments)',topSeg.length?topSeg.map(([s,v])=>`${s}: ${fmt(v,0)} MW`).join(' · '):null,'Determines future DC demand and type of client'],
-    ['1. Company Overview','Global Presence',scope?`View limited to ${scopeLabel}; global presence: see «Global» perspective`:`${Object.keys(regions).length} regions (${Object.entries(regions).map(([g,v])=>g+': '+fmt(v,0)+' MW').join(' · ')}) · ${Object.keys(markets).length} countries`,'Understands geography expansion'],
-    ['2. European / Regional Strategy',`Overall strategy${cityHint} (expansion, sovereignty, AI, cloud regions, edge)`,null,'Requires qualitative analysis','overall_strategy'],
-    ['2. European / Regional Strategy',isCountry?'Priority locations within country (by live MW)':'Priority countries (by live MW)',topM.slice(0,6).map(([m,v])=>`${m} (${fmt(v.live,0)} MW, ${v.n} DC)`).join(' · ')||null,'Identify preferred investment markets'],
-    ['2. European / Regional Strategy','Expansion (constr.+pipeline)',topPipe.slice(0,6).map(([m,v])=>`${m} (${fmt(v.uc+v.pipe,0)} MW)`).join(' · ')||'No pipeline recorded in database','Calculated from database'],
-    ['2. European / Regional Strategy','Reasons for country/site selection (grid, connectivity, incentives…)',null,'Identify main drivers for location decisions','reasons_site_selection'],
-    ['2. European / Regional Strategy','Public long-term roadmap',null,'High level visibility of future investments','public_roadmap'],
-    ['3. Existing Data Center Portfolio','Number of operational DC & campuses',`${oper} facilities with live capacity > 0${cityHint}`,'Existing footprint'],
-    ['3. Existing Data Center Portfolio','Estimated IT capacity (MW)',`${fmt(live,0)} MW live · ${fmt(sum(rs,'headline'),0)} MW headline`,'Real infrastructure size'],
-    ['3. Existing Data Center Portfolio','Year commissioned (first live)',years.length?`First facility: ${Math.min(...years)} · most recent: ${Math.max(...years)}`:null,'Growth timeline'],
-    ['3. Existing Data Center Portfolio','Facility category mix',(()=>{const m={};rs.forEach(r=>{const k=r[C.category];if(!k)return;m[k]=m[k]||{n:0,mw:0};m[k].n++;m[k].mw+=r[C.live]||0;});const e=Object.entries(m);return e.length?e.map(([k,v])=>`${k}: ${v.n} DC · ${fmt(v.mw,0)} MW live`).join(' · '):null;})(),'Colocation vs self-build split'],
-    ['3. Existing Data Center Portfolio','Facility subcategory mix',(()=>{const m={};rs.forEach(r=>{const k=r[C.subcategory];if(!k)return;m[k]=m[k]||{n:0,mw:0};m[k].n++;m[k].mw+=r[C.live]||0;});const e=Object.entries(m).sort((a,b)=>b[1].mw-a[1].mw);return e.length?e.map(([k,v])=>`${k}: ${v.n} DC · ${fmt(v.mw,0)} MW`).join(' · '):null;})(),'Retail/wholesale/BTS/self-build detail'],
-    ['3. Existing Data Center Portfolio','Facility status mix',(()=>{const m={};rs.forEach(r=>{const k=r[C.status];if(!k)return;m[k]=(m[k]||0)+1;});const e=Object.entries(m);return e.length?e.map(([k,v])=>`${k}: ${v} DC`).join(' · '):null;})(),'Active vs temporarily/permanently closed'],
-    ['3. Existing Data Center Portfolio','Ownership model (owned / leased / colocation)',topSeg[0]?`Dominant category in database: ${topSeg[0][0]} — owned/leased detail pending`:null,'Infrastructure strategy'],
-    ['3. Existing Data Center Portfolio','Land & built area',land>0?`${fmt(land/10000,0)} ha land · ${fmt(sum(rs,'building')/10000,1)} ha built`:null,'Calculated from database'],
-    ['3. Existing Data Center Portfolio','Technology characteristics (GPUs, cooling…)',(dens.length||pues.length)?((dens.length?`Avg. reported power density ${(dens.reduce((a,b)=>a+b,0)/dens.length).toFixed(2)} · `:'')+(pues.length?`Avg. design PUE ${(pues.reduce((a,b)=>a+b,0)/pues.length).toFixed(2)} (${pues.length} DCs report)`:'')):null,'Hardware providers, cooling technology'],
-    ['3. Existing Data Center Portfolio','Investment deployed',null,'Investment by asset and country level','investment_deployed'],
-    ['3. Existing Data Center Portfolio','Energy strategy (renewables targets)',null,'Requires qualitative analysis','energy_strategy'],
-    ['3. Existing Data Center Portfolio','Energy procurement model (PPAs, ownership, utilities)',null,'','energy_procurement_existing'],
-    ['3. Existing Data Center Portfolio','Renewable projects linked to DCs',null,'','renewable_projects'],
-    ['3. Existing Data Center Portfolio','Battery Energy Storage strategy',null,'','bess_strategy'],
-    ['3. Existing Data Center Portfolio','Grid services participation',null,'','grid_services'],
-    ['3. Existing Data Center Portfolio','Backup generation strategy (diesel / gas / hydrogen)',null,'','backup_generation'],
-    ['3. Existing Data Center Portfolio','Water usage strategy',null,'','water_usage'],
-    ['4. Development Pipeline','Number of facilities under construction',`${inUC} facilities · ${fmt(uc,0)} MW under construction${cityHint}`,'Location & size'],
-    ['4. Development Pipeline','Other announced pipeline',`${fmt(pipe,0)} MW`,'Calculated from database'],
-    ['4. Development Pipeline','Pipeline locations',topPipe.slice(0,8).map(([m,v])=>`${m}: ${fmt(v.uc+v.pipe,0)} MW`).join(' · ')||'—','Location & size'],
-    ['4. Development Pipeline','Expected commissioning dates',null,'Timing','expected_commissioning'],
-    ['4. Development Pipeline','Status dev portfolio (land secured, permitting, construction, announced)',null,'Project maturity','dev_portfolio_status'],
-    ['4. Development Pipeline','Investment committed',null,'Investment announced','investment_committed'],
-    ['4. Development Pipeline','Development strategy (inhouse, co-dev, M&A)',null,'','development_strategy'],
-    ['4. Development Pipeline','Main Dev partners',null,'By country and/or opportunity','dev_partners'],
-    ['4. Development Pipeline','Energy procurement model',null,'PPAs, ownership, utilities','energy_procurement_pipeline'],
-    ['5. Comments','Free-text comments / additional notes',null,'Anything not covered above','free_comments'],
+    [CAT.OVERVIEW,'Company type',companyTypeLabel(name),'Hyperscaler / Neocloud / Colocation — auto-classified by operator name; editable & saved per company','company_type'],
+    [CAT.OVERVIEW,'Business description and cloud market position',null,'Understand strategic importance and financial capacity','business_description'],
+    [CAT.OVERVIEW,`Position in BNEF database (${scopeLabel})`,`${fmt(live,0)} MW live (${totalLive?(100*live/totalLive).toFixed(1):'—'}${'%'} — ${shareLbl}) · ${oper} operational DCs of ${rs.length} recorded${cityHint}`,'Calculated from database'],
+    [CAT.OVERVIEW,'Main business drivers (proxy: BNEF segments)',topSeg.length?topSeg.map(([s,v])=>`${s}: ${fmt(v,0)} MW`).join(' · '):null,'Determines future DC demand and type of client'],
+    [CAT.OVERVIEW,'Global Presence',scope?`View limited to ${scopeLabel}; global presence: see «Global» perspective`:`${Object.keys(regions).length} regions (${Object.entries(regions).map(([g,v])=>g+': '+fmt(v,0)+' MW').join(' · ')}) · ${Object.keys(markets).length} countries`,'Understands geography expansion'],
+    [CAT.OVERVIEW,isCountry?'Priority locations within country (by live MW)':'Priority countries (by live MW)',topM.slice(0,6).map(([m,v])=>`${m} (${fmt(v.live,0)} MW, ${v.n} DC)`).join(' · ')||null,'Identify preferred investment markets — all geographies'],
+    [CAT.OVERVIEW,'Expansion pipeline (constr.+pipeline)',topPipe.slice(0,6).map(([m,v])=>`${m} (${fmt(v.uc+v.pipe,0)} MW)`).join(' · ')||'No pipeline recorded in database','Calculated from database — all geographies'],
+    [CAT.PORTFOLIO,'Number of operational DC & campuses',`${oper} facilities with live capacity > 0${cityHint}`,'Existing footprint'],
+    [CAT.PORTFOLIO,'Estimated IT capacity (MW)',`${fmt(live,0)} MW live · ${fmt(sum(rs,'headline'),0)} MW headline`,'Real infrastructure size'],
+    [CAT.PORTFOLIO,'Year commissioned (first live)',years.length?`First facility: ${Math.min(...years)} · most recent: ${Math.max(...years)}`:null,'Growth timeline'],
+    [CAT.PORTFOLIO,'Facility category mix',(()=>{const m={};rs.forEach(r=>{const k=r[C.category];if(!k)return;m[k]=m[k]||{n:0,mw:0};m[k].n++;m[k].mw+=r[C.live]||0;});const e=Object.entries(m);return e.length?e.map(([k,v])=>`${k}: ${v.n} DC · ${fmt(v.mw,0)} MW live`).join(' · '):null;})(),'Colocation vs self-build split'],
+    [CAT.PORTFOLIO,'Facility subcategory mix',(()=>{const m={};rs.forEach(r=>{const k=r[C.subcategory];if(!k)return;m[k]=m[k]||{n:0,mw:0};m[k].n++;m[k].mw+=r[C.live]||0;});const e=Object.entries(m).sort((a,b)=>b[1].mw-a[1].mw);return e.length?e.map(([k,v])=>`${k}: ${v.n} DC · ${fmt(v.mw,0)} MW`).join(' · '):null;})(),'Retail/wholesale/BTS/self-build detail'],
+    [CAT.PORTFOLIO,'Facility status mix',(()=>{const m={};rs.forEach(r=>{const k=r[C.status];if(!k)return;m[k]=(m[k]||0)+1;});const e=Object.entries(m);return e.length?e.map(([k,v])=>`${k}: ${v} DC`).join(' · '):null;})(),'Active vs temporarily/permanently closed'],
+    [CAT.PORTFOLIO,'Ownership model (owned / leased / colocation)',topSeg[0]?`Dominant category in database: ${topSeg[0][0]} — owned/leased detail pending`:null,'Infrastructure strategy'],
+    [CAT.PORTFOLIO,'Land & built area',land>0?`${fmt(land/10000,0)} ha land · ${fmt(sum(rs,'building')/10000,1)} ha built`:null,'Calculated from database'],
+    [CAT.PORTFOLIO,'Technology characteristics (GPUs, cooling…)',(dens.length||pues.length)?((dens.length?`Avg. reported power density ${(dens.reduce((a,b)=>a+b,0)/dens.length).toFixed(2)} · `:'')+(pues.length?`Avg. design PUE ${(pues.reduce((a,b)=>a+b,0)/pues.length).toFixed(2)} (${pues.length} DCs report)`:'')):null,'Hardware providers, cooling technology'],
+    [CAT.PORTFOLIO,'Investment deployed',null,'Investment by asset and country level — company-wide view (country detail in each country strategy)','investment_deployed'],
+    [CAT.PIPELINE,'Number of facilities under construction',`${inUC} facilities · ${fmt(uc,0)} MW under construction${cityHint}`,'Location & size'],
+    [CAT.PIPELINE,'Other announced pipeline',`${fmt(pipe,0)} MW`,'Calculated from database'],
+    [CAT.PIPELINE,'Pipeline locations',topPipe.slice(0,8).map(([m,v])=>`${m}: ${fmt(v.uc+v.pipe,0)} MW`).join(' · ')||'—','Location & size'],
+    [CAT.EURO,`Overall strategy${cityHint} (expansion, sovereignty, AI, cloud regions, edge)`,null,'Requires qualitative analysis','overall_strategy'],
+    [CAT.EURO,'European footprint (BNEF)',topM_eu.length?`${fmt(liveEU,0)} MW live · ${nDcEU} DC recorded in ${topM_eu.length} European countries`:'No European footprint recorded in database','Calculated from database — geographic Europe'],
+    [CAT.EURO,isCountry?'Priority locations within country (by live MW)':'Priority countries in Europe (by live MW)',topM_eu.slice(0,6).map(([m,v])=>`${m} (${fmt(v.live,0)} MW, ${v.n} DC)`).join(' · ')||null,'Identify preferred investment markets — European countries only'],
+    [CAT.EURO,'Expansion in Europe (constr.+pipeline)',topPipe_eu.slice(0,6).map(([m,v])=>`${m} (${fmt(v.uc+v.pipe,0)} MW)`).join(' · ')||'No European pipeline recorded in database','Calculated from database — European countries only'],
+    [CAT.EURO,'Public long-term roadmap',null,'High level visibility of future investments','public_roadmap'],
+    [CAT.COMMENTS,'Free-text comments / additional notes',null,'Anything not covered above (company-wide; country-specific comments live in each country strategy)','free_comments'],
   ].map(r=>({cat:r[0],crit:r[1],val:r[2],com:r[3],fk:r[4]||null}));
   return {name, market: scope?scopeLabel:'', scope, rs, allRs: R.filter(r=>r[C.company]===name), rows};
 }
@@ -1057,7 +1073,7 @@ function renderCompanyModal(){
         <button class="btn" onclick="addCountryStrategyFromSelect()">➕ Add country strategy</button>
       </div>
     </div>`;
-  const EURO_CAT = '2. European / Regional Strategy';
+  const EURO_CAT = CAT.EURO;
   let lastCat='', body='';
   f.rows.forEach(r=>{
     if(r.cat!==lastCat){
@@ -1399,11 +1415,36 @@ async function saveFieldEdit(fk){
  * integran el guardado por campo de la Fase 3. La lista de países vive en el campo
  * `country_perspectives` (JSON).
  */
-const COUNTRY_STRAT_SUBS = [
-  { key:'overall_strategy',       label:c=>`Overall strategy in ${c} (expansion, sovereignty, AI, cloud regions, edge)` },
-  { key:'reasons_site_selection', label:c=>`Reasons for site selection in ${c} (grid, connectivity, incentives…)` },
-  { key:'public_roadmap',         label:c=>`Public long-term roadmap in ${c}` },
+const COUNTRY_STRAT_GROUPS = [
+  { id:'strategy', title:'A · Strategy & positioning', subs:[
+    { key:'overall_strategy',       label:c=>`Overall strategy in ${c} (expansion, sovereignty, AI, cloud regions, edge)` },
+    { key:'reasons_site_selection', label:c=>`Reasons for site selection in ${c} (grid, connectivity, incentives…)` },
+    { key:'public_roadmap',         label:c=>`Public long-term roadmap in ${c}` },
+  ]},
+  { id:'portfolio', title:'B · Existing portfolio & energy', subs:[
+    { key:'investment_deployed',        label:c=>`Investment deployed in ${c} (by asset and country level)` },
+    { key:'energy_strategy',            label:c=>`Energy strategy in ${c} (renewables targets)` },
+    { key:'energy_procurement_existing',label:c=>`Energy procurement model in ${c} (PPAs, ownership, utilities)` },
+    { key:'renewable_projects',         label:c=>`Renewable projects linked to DCs in ${c}` },
+    { key:'bess_strategy',              label:c=>`Battery Energy Storage strategy in ${c}` },
+    { key:'grid_services',              label:c=>`Grid services participation in ${c}` },
+    { key:'backup_generation',          label:c=>`Backup generation strategy in ${c} (diesel / gas / hydrogen)` },
+    { key:'water_usage',                label:c=>`Water usage strategy in ${c}` },
+  ]},
+  { id:'pipeline', title:'C · Development pipeline', subs:[
+    { key:'expected_commissioning',     label:c=>`Expected commissioning dates in ${c}` },
+    { key:'dev_portfolio_status',       label:c=>`Status dev portfolio in ${c} (land secured, permitting, construction, announced)` },
+    { key:'investment_committed',       label:c=>`Investment committed in ${c} (announced)` },
+    { key:'development_strategy',       label:c=>`Development strategy in ${c} (inhouse, co-dev, M&A)` },
+    { key:'dev_partners',               label:c=>`Main dev partners in ${c}` },
+    { key:'energy_procurement_pipeline',label:c=>`Energy procurement model for the pipeline in ${c} (PPAs, ownership, utilities)` },
+  ]},
+  { id:'comments', title:'D · Country comments', subs:[
+    { key:'comments',                   label:c=>`Free-text comments / additional notes on ${c}` },
+  ]},
 ];
+/* Lista plana (compatibilidad: research prompt, fieldTitle, pendientes) */
+const COUNTRY_STRAT_SUBS = COUNTRY_STRAT_GROUPS.reduce((a,g)=>a.concat(g.subs),[]);
 function countryFieldKey(country, sub){ return 'country::'+country+'::'+sub; }
 function getCountryPerspectives(){
   const row = fichaQualitativeCache['country_perspectives'];
@@ -1437,12 +1478,20 @@ function renderCountryStrategies(){
     const ctx = d.nDC
       ? `Position in BNEF (${cEsc}): ${fmt(d.live,0)} MW live · ${d.oper} operational DC of ${d.nDC} recorded`
       : `No data in the BNEF database for ${cEsc} — strategy can still be recorded.`;
-    let rows = '';
-    rows += fwRow(COUNTRY_STRAT_SUBS[0].label(cEsc), null, countryFieldKey(country,'overall_strategy'));
-    rows += fwRow(`Priority locations within ${cEsc} (by live MW)`, d.topLocs||null, null);
-    rows += fwRow(`Expansion in ${cEsc} (constr.+pipeline)`, d.topExp || (d.uc+d.pipe ? fmt(d.uc+d.pipe,0)+' MW' : 'No pipeline recorded in database'), null);
-    rows += fwRow(COUNTRY_STRAT_SUBS[1].label(cEsc), null, countryFieldKey(country,'reasons_site_selection'));
-    rows += fwRow(COUNTRY_STRAT_SUBS[2].label(cEsc), null, countryFieldKey(country,'public_roadmap'));
+    /* Filas derivadas de BNEF que se intercalan dentro de un subapartado, justo
+       después del campo indicado (clave = field key del sub que las precede). */
+    const derivedAfter = {
+      overall_strategy:
+        fwRow(`Priority locations within ${cEsc} (by live MW)`, d.topLocs||null, null) +
+        fwRow(`Expansion in ${cEsc} (constr.+pipeline)`, d.topExp || (d.uc+d.pipe ? fmt(d.uc+d.pipe,0)+' MW' : 'No pipeline recorded in database'), null),
+      investment_deployed: '',
+    };
+    const rows = COUNTRY_STRAT_GROUPS.map(g=>{
+      const inner = g.subs.map(s=>
+        fwRow(s.label(cEsc), null, countryFieldKey(country, s.key)) + (derivedAfter[s.key] || '')
+      ).join('');
+      return `<div class="cs-group"><div class="cs-sub"><h5>${g.title}</h5></div>${inner}</div>`;
+    }).join('');
     return `<div class="fw-cat country-strat-block" data-country="${escapeAttr(country)}" style="margin-top:6px">
       <h4 style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span>Country strategy · ${cEsc}</span>
@@ -1496,7 +1545,11 @@ function fieldTitle(fk){
   const rowMeta = currentFicha && currentFicha.rows.find(r=>r.fk===fk);
   if(rowMeta) return rowMeta.crit;
   const m = /^country::(.+)::(.+)$/.exec(fk||'');
-  if(m){ const sub = m[2].replace(/_/g,' '); return sub.charAt(0).toUpperCase()+sub.slice(1)+' — '+m[1]; }
+  if(m){
+    const known = COUNTRY_STRAT_SUBS.find(s=>s.key===m[2]);
+    if(known) return known.label(m[1]);
+    const sub = m[2].replace(/_/g,' '); return sub.charAt(0).toUpperCase()+sub.slice(1)+' — '+m[1];
+  }
   return fk;
 }
 
