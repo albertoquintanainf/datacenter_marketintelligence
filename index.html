@@ -170,11 +170,22 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   }
   body.print-ficha .fTab[data-ftab="stats"],
   body.print-ficha .fTab[data-ftab="anuncios"]{ break-before:page; page-break-before:always; }
-  /* Solo unidades PEQUEÑAS evitan cortarse; los paneles/tablas grandes SÍ pueden
-     fluir entre páginas (si se les fuerza a no cortarse, saltan enteros de página
-     y dejan la anterior casi en blanco). */
-  body.print-ficha .fw-cat, body.print-ficha .fw-row,
+  /* Solo unidades PEQUEÑAS evitan cortarse. Una sección entera (.fw-cat) con
+     break-inside:avoid es imposible de satisfacer cuando mide más de una página:
+     el navegador la empuja a una hoja nueva y deja la anterior EN BLANCO. Con
+     "1. Company Overview" en 14 filas (7 de texto libre) eso pasa siempre en la
+     primera página. Se deja fluir la sección y se protege solo la fila. */
+  body.print-ficha .fw-cat{ break-inside:auto; page-break-inside:auto; }
+  body.print-ficha .fw-row,
   body.print-ficha .chartbox, body.print-ficha tr{ break-inside:avoid; page-break-inside:avoid; }
+  /* Un título nunca se queda solo al pie de página */
+  body.print-ficha .fw-cat h4, body.print-ficha .cs-sub,
+  body.print-ficha .fTabPrintTitle{ break-after:avoid; page-break-after:avoid; break-inside:avoid; }
+  body.print-ficha{ orphans:3; widows:3; }
+  /* Overlays que viven en el DOM tras usarse una vez (position:fixed, inset:0):
+     si alguno quedara visible al imprimir, se lleva una página entera por delante. */
+  body.print-ficha #subModal, body.print-ficha #collabGate,
+  body.print-ficha #collabBar{ display:none !important; }
   body.print-ficha .fTab .panel{ break-inside:auto; }
   /* Los bloques de país son largos (4 subapartados): si se fuerza a no cortarse,
      saltan enteros de página y dejan la anterior en blanco. Se deja fluir el
@@ -190,6 +201,35 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
     padding:0 0 6mm 0; margin-bottom:6mm; border-bottom:1.5px solid #222;
   }
   body.print-ficha #printHeader *{ visibility:visible !important; }
+
+  /* --- Jerarquía tipográfica del PDF ---
+     El peso (no el color) separa los niveles: en B/N el naranja de pantalla se
+     queda en un gris pálido y el título no se distingue del texto editado.
+       1) .fTabPrintTitle  · pestaña   · 13pt bold, filete naranja
+       2) .fw-cat h4       · sección   · 11pt bold negro, filete negro
+       3) .cs-sub h5       · subaptdo. · 9.5pt bold, filete fino
+       4) .fw-row .c       · criterio  · gris medio
+       5) .fw-row .v       · TEXTO EDITADO · negro normal
+  */
+  body.print-ficha .fw-cat h4{
+    font-family:"IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif !important;
+    font-size:11pt !important; font-weight:700 !important;
+    color:#111 !important; text-transform:uppercase; letter-spacing:.05em;
+    border-bottom:1.2pt solid #111 !important; padding-bottom:1.5mm; margin:0 0 2.5mm;
+  }
+  body.print-ficha .country-strat-block{ margin-top:4mm !important; }
+  body.print-ficha .country-strat-block h4{
+    border-left:2.5pt solid #f47220; padding-left:2.5mm;
+    border-bottom:.8pt solid #555 !important;
+  }
+  body.print-ficha .cs-sub h5{
+    font-family:"IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif !important;
+    font-size:9.5pt !important; font-weight:700 !important;
+    color:#222 !important; letter-spacing:.04em;
+    border-bottom:.5pt solid #bbb !important; padding-bottom:1mm; margin:2.5mm 0 1mm;
+  }
+  body.print-ficha .fw-row .c{ color:#555 !important; font-weight:400; }
+  body.print-ficha .fw-row .v{ color:#000 !important; font-weight:400; }
 
   /* --- MODO 2: imprimir la pestaña activa (dashboard completo) --- */
   body.print-tab header, body.print-tab nav, body.print-tab footer,
