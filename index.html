@@ -178,8 +178,17 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-ficha .fw-cat{ break-inside:auto; page-break-inside:auto; }
   body.print-ficha .fw-row,
   body.print-ficha .chartbox, body.print-ficha tr{ break-inside:avoid; page-break-inside:avoid; }
-  /* Un título nunca se queda solo al pie de página */
-  body.print-ficha .fw-cat h4, body.print-ficha .cs-sub,
+  /* Un título nunca se queda solo al pie de página.
+     OJO a la CADENA: prohibir el corte tras el <h4> no basta si entre el título
+     y el contenido hay algo más. En los bloques de país va un <div class="mini">
+     con el contexto BNEF, y el navegador cortaba ahí: título + contexto se
+     quedaban solos al pie y los subapartados saltaban a la hoja siguiente.
+     Hay que prohibir el corte en TODOS los eslabones (h4 → .mini → .cs-sub →
+     primera fila); así el corte válido más cercano pasa a estar ANTES del h4 y
+     la cabecera baja de página junto a su contenido. */
+  body.print-ficha .fw-cat h4, body.print-ficha .cs-sub, body.print-ficha .cs-sub h5,
+  body.print-ficha .country-strat-block > h4,
+  body.print-ficha .fw-cat > .mini, body.print-ficha .country-strat-block > .mini,
   body.print-ficha .fTabPrintTitle{ break-after:avoid; page-break-after:avoid; break-inside:avoid; }
   body.print-ficha{ orphans:3; widows:3; }
   /* Overlays que viven en el DOM tras usarse una vez (position:fixed, inset:0):
