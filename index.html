@@ -1836,18 +1836,10 @@ function companyStatsHTML(f){
   </div>`;
 }
 
-/* Valor guardado (Supabase) de un campo editable, o null si está vacío. */
-function fichaFieldValue(fk){
-  const row = fk ? fichaQualitativeCache[fk] : null;
-  const v = (row && row.value != null) ? String(row.value).trim() : '';
-  return v || null;
-}
-/* Pendiente = fila sin valor derivado de BNEF y sin texto guardado por el equipo.
-   (Antes solo miraba r.val, que para los campos editables es SIEMPRE null en
-   f.rows: el prompt volvía a pedir campos que el equipo ya había completado.) */
-function pendingRows(){
-  return currentFicha.rows.filter(r=> r.val==null && !fichaFieldValue(r.fk));
-}
+/* NOTA: el prompt ya NO filtra por "pendiente". Un campo relleno puede estar mal,
+   desactualizado o metido por error, y filtrarlo significaba que esa sección no se
+   volvía a investigar nunca. Se piden siempre todos los criterios. Solo se sigue
+   distinguiendo lo derivado de BNEF (no investigable) de lo editable. */
 
 function companyAnnPanelHTML(f){
   return `
@@ -1887,9 +1879,8 @@ function countryPromptCtx(name, country){
 function researchPromptText(){
   const f = currentFicha;
   const countries = (typeof getCountryPerspectives==='function') ? getCountryPerspectives() : [];
-  const pend = pendingRows().filter(r=>r.fk);      // criterios cualitativos (editables) aún vacíos
-  const gaps = pendingRows().filter(r=>!r.fk);     // huecos de la propia base BNEF (no se investigan igual)
-  const done = f.rows.filter(r=>r.fk && (fichaFieldValue(r.fk) || r.val!=null)).map(r=>r.crit);
+  const research = f.rows.filter(r=>r.fk);                 // todos los criterios editables (rellenos o no)
+  const gaps     = f.rows.filter(r=>!r.fk && r.val==null); // huecos de la propia base BNEF
 
   /* --- contexto BNEF de empresa --- */
   const rs = f.allRs || R.filter(r=>r[C.company]===f.name);
@@ -1900,7 +1891,7 @@ function researchPromptText(){
 
   const L = [];
   L.push(`ROLE`);
-  L.push(`You are a senior data center market analyst. Research and complete the pending criteria of the company profile of "${f.name}" for an internal investment-intelligence database. Rigour beats coverage: an empty field is better than a wrong one.`);
+  L.push(`You are a senior data center market analyst. Research and complete the company profile of "${f.name}" for an internal investment-intelligence database. Rigour beats coverage: an empty field is better than a wrong one.`);
 
   L.push(`\nCONTEXT (do not research this — it is given)`);
   L.push(`- Company: ${f.name}${(typeof companyTypeLabel==='function')?` · classified in the database as: ${companyTypeLabel(f.name)}`:''}`);
@@ -1908,10 +1899,10 @@ function researchPromptText(){
   L.push(`- Company footprint in the snapshot: ${fmt(liveAll,0)} MW live across ${rs.length} recorded DC in ${mkts.length} countries.`);
   L.push(`- European footprint (geographic Europe): ${fmt(liveEU,0)} MW live in ${euMkts.length} countries${euMkts.length?` (${euMkts.join(', ')})`:''}.`);
   if(countries.length){
-    L.push(`- COUNTRY BLOCKS ADDED TO THIS PROFILE BY THE ANALYST: ${countries.join(', ')}.`);
-    L.push(`  These countries are the analyst's current priority. Country-specific research is required for each of them, and only for them: do not add blocks for other countries.`);
+    L.push(`- COUNTRY BLOCKS CURRENTLY OPEN IN THIS PROFILE: ${countries.join(', ')}.`);
+    L.push(`  The analyst opened these blocks, so they are the current priority: a full country-level answer is required for each of them, and only for them. Do not add blocks for other countries, however relevant they look.`);
   } else {
-    L.push(`- No country block has been added to this profile yet, so no country-level research is requested. Keep every answer at company or European level.`);
+    L.push(`- No country block is open in this profile, so no country-level research is requested. Keep every answer at company or European level.`);
   }
 
   L.push(`\nSCOPE DISCIPLINE (the profile is structured by scope — respect it)`);
@@ -1932,49 +1923,34 @@ function researchPromptText(){
   L.push(`- <criterion exactly as written>: 1-3 sentences with figures and dates. [Label] Source: <publisher — document title, date> — <URL>`);
   L.push(`- If nothing solid is found: "Not found — no primary source located." Do not fill the gap with assumptions or with what a peer operator does.`);
 
-  /* --- criterios pendientes a nivel empresa, agrupados por sección --- */
-  if(pend.length){
-    L.push(`\n========== PENDING CRITERIA — COMPANY PROFILE ==========`);
-    L.push(`(Criteria already completed by the team are omitted on purpose — do not re-research them.)`);
-    let last='';
-    pend.forEach(r=>{
-      if(r.cat!==last){ L.push(`\n${r.cat}`); last=r.cat; }
-      L.push(`- ${r.crit}${r.com?`   [what we need: ${r.com}]`:''}`);
-    });
-  } else {
-    L.push(`\n========== PENDING CRITERIA — COMPANY PROFILE ==========`);
-    L.push(`None: every company-level criterion is already completed.`);
-  }
+  /* --- criterios a nivel empresa, agrupados por sección --- */
+  L.push(`\n========== CRITERIA — COMPANY PROFILE ==========`);
+  L.push(`Research and answer EVERY criterion below. Some of them may already contain text in our database, but that text can be wrong, stale or entered by mistake, so it is deliberately not shown to you: build each answer from scratch from primary sources.`);
+  let last='';
+  research.forEach(r=>{
+    if(r.cat!==last){ L.push(`\n${r.cat}`); last=r.cat; }
+    L.push(`- ${r.crit}${r.com?`   [what we need: ${r.com}]`:''}`);
+  });
 
-  /* --- bloques de país --- */
+  /* --- bloques de país abiertos en la ficha --- */
   countries.forEach(c=>{
-    const subsPend = COUNTRY_STRAT_SUBS.filter(s=>!fichaFieldValue(countryFieldKey(c,s.key)));
     L.push(`\n========== COUNTRY BLOCK — ${c.toUpperCase()} ==========`);
     L.push(countryPromptCtx(f.name, c));
     L.push(`For this block, prioritise ${c}'s national primary sources: the grid operator / TSO, the energy regulator, the permitting authority (national, regional and municipal), the official gazette, and the company's local subsidiary filings. Answer in English even when the source is not.`);
-    if(!subsPend.length){ L.push(`No pending criteria for ${c}: the block is already complete.`); return; }
     COUNTRY_STRAT_GROUPS.forEach(g=>{
-      const items = g.subs.filter(s=>subsPend.includes(s));
-      if(!items.length) return;
       L.push(`\n${g.title}`);
-      items.forEach(s=>L.push(`- ${s.label(c)}`));
+      g.subs.forEach(s=>L.push(`- ${s.label(c)}`));
     });
   });
 
   /* --- huecos de la base de datos (contexto, no investigación principal) --- */
   if(gaps.length){
     L.push(`\n========== DATABASE GAPS (secondary) ==========`);
-    L.push(`These fields are normally computed from the BNEF snapshot but came back empty, which usually means the snapshot itself lacks the data. Only answer them if a primary source gives it directly; otherwise reply "Not in the snapshot".`);
+    L.push(`These fields are computed from the BNEF snapshot and came back empty, which usually means the snapshot itself lacks the data. They are not editable in the profile. Only answer them if a primary source gives the figure directly; otherwise reply "Not in the snapshot".`);
     gaps.forEach(r=>L.push(`- [${r.cat}] ${r.crit}`));
   }
 
-  if(done.length){
-    L.push(`\n========== ALREADY COMPLETED (do not redo) ==========`);
-    L.push(done.map(x=>`- ${x}`).join('\n'));
-    L.push(`Only revisit one of these if you find a primary source that contradicts it — in that case flag it separately at the end, do not rewrite the field.`);
-  }
-
-  L.push(`\nFINAL CHECK before you answer: every figure has a label and a dated primary source; nothing is prorated or inferred from a peer; anything you could not verify says "Not found".`);
+  L.push(`\nFINAL CHECK before you answer: every criterion above has an answer or an explicit "Not found"; every figure has a label and a dated primary source; nothing is prorated or inferred from a peer operator.`);
   return L.join('\n');
 }
 function copyResearchPrompt(){
