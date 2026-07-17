@@ -128,6 +128,21 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 .fTab-hidden{display:none}
 .ficha-print-all .fTab-hidden{display:block}
 .fTabPrintTitle{display:none}
+/* --- Excluir secciones/pestañas del PDF (estado efímero, solo impresión) ---
+   En pantalla NADA se oculta: la sección excluida se marca y se atenúa para
+   que se siga pudiendo leer y editar. El display:none solo ocurre en @media
+   print (body.print-ficha / body.print-sheet). */
+.pdf-toggle{appearance:none;background:#fff;border:1px solid var(--line,#e5ded5);border-radius:4px;cursor:pointer;
+  font-family:var(--mono);font-size:9.5px;line-height:1;padding:3px 7px;color:var(--dim,#7c756e);white-space:nowrap;letter-spacing:.04em;text-transform:none}
+.pdf-toggle:hover{background:#f5f1ec;color:#333;border-color:#c9c1b7}
+.pdf-toggle.off{background:#fdecec;border-color:#e0a9a4;color:#c0392b;font-weight:600}
+.fw-cat.pdf-off,.fTab .panel.pdf-off{border-left:3px solid #e0a9a4;padding-left:9px;background:repeating-linear-gradient(135deg,transparent,transparent 9px,rgba(192,57,43,.035) 9px,rgba(192,57,43,.035) 18px)}
+.fw-cat.pdf-off > *:not(h4),.fTab .panel.pdf-off > *:not(h3){opacity:.4}
+.fTabBtn.pdf-off-btn{text-decoration:line-through;opacity:.55}
+.fTabBtn.pdf-off-btn::after{content:' 🚫';text-decoration:none;font-size:9px}
+#pdfSectionsCtl label{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--dim,#7c756e);cursor:pointer;white-space:nowrap}
+#pdfSectionsCtl input{accent-color:var(--accent,#f47220);cursor:pointer}
+#pdfExcludedCount{align-self:center;font-family:var(--mono);font-size:10.5px;color:#c0392b}
 
 @media print{
   /* Configuración de página: A4 apaisado (mejor para gráficas y mapa) con márgenes reducidos.
@@ -369,6 +384,26 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   body.print-tab table, body.print-ficha table { font-size: 9pt; }
   /* KPIs en fila comprimida */
   body.print-tab .kpis{ page-break-inside: avoid; }
+
+  /* --- Secciones/pestañas excluidas del PDF -------------------------------
+     Va AL FINAL del bloque a propósito: la regla
+     `body.print-ficha .fTab-hidden{display:block !important}` (arriba) revela
+     las 3 pestañas al imprimir y tiene la misma especificidad que
+     `body.print-ficha .pdf-off`. Se resuelve con selectores más específicos
+     (.fTab.pdf-off) y, además, colocando el bloque después. */
+  body.print-ficha .fTab.pdf-off,
+  body.print-ficha .fw-cat.pdf-off,
+  body.print-ficha .panel.pdf-off,
+  body.print-sheet .fTab.pdf-off,
+  body.print-sheet .fw-cat.pdf-off,
+  body.print-sheet .panel.pdf-off{ display:none !important; }
+  /* Los controles ya llevan .no-print, pero por si acaso */
+  body.print-ficha .pdf-toggle, body.print-sheet .pdf-toggle,
+  body.print-ficha #pdfSectionsCtl, body.print-sheet #pdfSectionsCtl{ display:none !important; }
+  /* Al ocultar la 1ª pestaña, la 2ª/3ª ya no necesitan salto de página previo
+     (dejaría una hoja en blanco al principio). Lo gestiona el JS con la clase
+     .pdf-first-visible. */
+  body.print-ficha .fTab.pdf-first-visible{ break-before:auto !important; page-break-before:auto !important; }
 }
 </style>
 
@@ -766,6 +801,9 @@ window.printCurrentTab = function(){
   }, 1500);
 };
 window.printSheet = function(){
+  // Exclusiones de PDF: abortar si no queda nada que imprimir y marcar la
+  // primera pestaña visible (evita la hoja en blanco inicial).
+  try{ if(typeof pdfPreparePrint==='function' && !pdfPreparePrint()) return; }catch(_){}
   // Detectar nombre de la ficha del modal (empresa/DC) para etiqueta del header
   var sheetLabel = 'Profile';
   try{
@@ -980,7 +1018,7 @@ function renderSearchKpis(){
 
 /* ---------- fichas ---------- */
 function openModal(html){ els('sheet').innerHTML='<button class="close" onclick="closeModal()">Close ✕</button>'+html; els('modal').classList.add('open'); }
-function closeModal(){ els('modal').classList.remove('open'); if(window._fichaChart){try{window._fichaChart.destroy();}catch(_){ } window._fichaChart=null;} delete chartBoxes['fichaChart']; ['coChartCountry','coChartSub','coChartCap','coChartCat','coChartAnn'].forEach(id=>{ if(charts[id]){try{charts[id].destroy();}catch(_){ } delete charts[id];} delete chartBoxes[id]; }); }
+function closeModal(){ els('modal').classList.remove('open'); try{ if(window._pdfObserver){ window._pdfObserver.disconnect(); } }catch(_){ } if(window._fichaChart){try{window._fichaChart.destroy();}catch(_){ } window._fichaChart=null;} delete chartBoxes['fichaChart']; ['coChartCountry','coChartSub','coChartCap','coChartCat','coChartAnn'].forEach(id=>{ if(charts[id]){try{charts[id].destroy();}catch(_){ } delete charts[id];} delete chartBoxes[id]; }); }
 els('modal').addEventListener('click',e=>{ if(e.target.id==='modal') closeModal(); });
 
 function fwRow(c,v,fk){
@@ -1116,6 +1154,142 @@ window.fichaTab = function(name, btn){
   else if(name==='anuncios') requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ drawCompanyAnnViz(currentFicha); }catch(_){} }));
 };
 
+/* ============================================================
+ * FICHA · Excluir secciones y pestañas del PDF
+ * ------------------------------------------------------------
+ * Alcance: solo la impresión. En pantalla la sección excluida sigue
+ * visible (atenuada y marcada) para poder leerla y editarla.
+ * Persistencia: NINGUNA. El estado vive en las clases del DOM del modal;
+ * al cerrar y reabrir la ficha, renderCompanyModal() reconstruye el HTML
+ * y todo vuelve a estar incluido.
+ * ============================================================ */
+const PDF_OFF = 'pdf-off';
+
+/* Marca/desmarca un elemento (pestaña, .fw-cat o .panel) y repinta su botón */
+function pdfSetOff(el, off){
+  if(!el) return;
+  el.classList.toggle(PDF_OFF, !!off);
+  const btn = el.querySelector(':scope > h4 > .pdf-toggle, :scope > h3 > .pdf-toggle');
+  if(btn){
+    btn.classList.toggle('off', !!off);
+    btn.textContent = off ? '🚫 Not in PDF' : '🖨 In PDF';
+    btn.title = off
+      ? 'Excluded from the PDF export — click to include it again'
+      : 'Included in the PDF export — click to exclude it';
+  }
+  pdfUpdateSummary();
+}
+
+/* Toggle de pestaña completa (checkbox de la toolbar) */
+window.pdfToggleTab = function(name, include){
+  const sheet = els('sheet'); if(!sheet) return;
+  const tab = sheet.querySelector('.fTab[data-ftab="'+name+'"]');
+  if(tab) tab.classList.toggle(PDF_OFF, !include);
+  const btn = sheet.querySelector('.fTabBtn[data-ftab="'+name+'"]');
+  if(btn) btn.classList.toggle('pdf-off-btn', !include);
+  const cb = sheet.querySelector('#pdfSectionsCtl input[data-pdf-tab="'+name+'"]');
+  if(cb) cb.checked = !!include;
+  pdfUpdateSummary();
+};
+
+/* Volver a incluirlo todo */
+window.pdfResetSections = function(){
+  const sheet = els('sheet'); if(!sheet) return;
+  sheet.querySelectorAll('.'+PDF_OFF).forEach(el=>el.classList.remove(PDF_OFF));
+  sheet.querySelectorAll('.pdf-off-btn').forEach(el=>el.classList.remove('pdf-off-btn'));
+  sheet.querySelectorAll('#pdfSectionsCtl input[data-pdf-tab]').forEach(cb=>cb.checked=true);
+  sheet.querySelectorAll('.pdf-toggle').forEach(b=>{
+    b.classList.remove('off'); b.textContent='🖨 In PDF';
+    b.title='Included in the PDF export — click to exclude it';
+  });
+  pdfUpdateSummary();
+};
+
+/* Contador de exclusiones en la toolbar */
+function pdfUpdateSummary(){
+  const sheet = els('sheet'); if(!sheet) return;
+  const out = sheet.querySelector('#pdfExcludedCount');
+  if(!out) return;
+  const tabs = sheet.querySelectorAll('.fTab.'+PDF_OFF).length;
+  // Secciones excluidas por sí mismas (no las que caen dentro de una pestaña
+  // ya excluida: contarlas dos veces confunde).
+  let secs = 0;
+  sheet.querySelectorAll('.fw-cat.'+PDF_OFF+', .fTab .panel.'+PDF_OFF).forEach(el=>{
+    if(!el.closest('.fTab.'+PDF_OFF) && !(el.parentElement && el.parentElement.closest('.fw-cat.'+PDF_OFF))) secs++;
+  });
+  const parts = [];
+  if(tabs) parts.push(tabs+' tab'+(tabs>1?'s':''));
+  if(secs) parts.push(secs+' section'+(secs>1?'s':''));
+  out.textContent = parts.length ? '⚠ '+parts.join(' + ')+' excluded from PDF' : '';
+}
+
+/* Inyecta un botón In PDF / Not in PDF en la cabecera de cada sección.
+   Idempotente: se puede volver a llamar cuando llega contenido asíncrono
+   (estrategias por país, anuncios) sin duplicar botones ni perder el estado. */
+function pdfInitSectionToggles(){
+  const sheet = els('sheet'); if(!sheet) return;
+  sheet.querySelectorAll('.fTab .fw-cat, .fTab .panel').forEach(sec=>{
+    const head = sec.querySelector(':scope > h4, :scope > h3');
+    if(!head || head.querySelector('.pdf-toggle')) return;
+    // El h4/h3 puede ser texto plano (categorías) o ya un flex con span +
+    // botón Remove (bloques de país). Se normaliza a flex y el primer hijo
+    // absorbe el espacio libre, así los botones quedan a la derecha.
+    if(head.childElementCount === 0){
+      const sp = document.createElement('span');
+      sp.innerHTML = head.innerHTML;
+      head.innerHTML = '';
+      head.appendChild(sp);
+    }
+    head.style.display = 'flex';
+    head.style.alignItems = 'center';
+    head.style.gap = '8px';
+    if(head.firstElementChild) head.firstElementChild.style.flex = '1';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pdf-toggle no-print';
+    btn.addEventListener('click', ev=>{
+      ev.preventDefault(); ev.stopPropagation();
+      pdfSetOff(sec, !sec.classList.contains(PDF_OFF));
+    });
+    head.appendChild(btn);
+    pdfSetOff(sec, sec.classList.contains(PDF_OFF)); // pinta la etiqueta inicial
+  });
+  pdfUpdateSummary();
+}
+
+/* El contenido cualitativo y los bloques de país se cargan async y se
+   re-renderizan al añadir/quitar países: se observa el modal y se re-inyecta.
+   Se desconecta durante la inyección para no reentrar (el propio init muta el
+   DOM al añadir los botones y el contador). */
+window._pdfObserver = null;
+function pdfWatchSheet(){
+  const sheet = els('sheet'); if(!sheet || !window.MutationObserver) return;
+  if(window._pdfObserver) window._pdfObserver.disconnect();
+  window._pdfObserver = new MutationObserver(()=>{
+    window._pdfObserver.disconnect();
+    try{ pdfInitSectionToggles(); }catch(e){ console.warn('pdfInitSectionToggles:', e); }
+    if(els('sheet')) window._pdfObserver.observe(els('sheet'), {childList:true, subtree:true});
+  });
+  window._pdfObserver.observe(sheet, {childList:true, subtree:true});
+}
+
+/* Antes de imprimir: comprobar que queda algo y evitar la hoja en blanco
+   inicial si la primera pestaña está excluida. Devuelve false para abortar. */
+function pdfPreparePrint(){
+  const sheet = els('sheet'); if(!sheet) return true;
+  const tabs = Array.from(sheet.querySelectorAll('.fTab'));
+  if(!tabs.length) return true;
+  const visible = tabs.filter(t=>!t.classList.contains(PDF_OFF));
+  if(!visible.length){
+    alert('Every tab is excluded from the PDF. Include at least one section before exporting.');
+    return false;
+  }
+  // La 1ª pestaña visible no debe forzar salto de página previo
+  tabs.forEach(t=>t.classList.remove('pdf-first-visible'));
+  visible[0].classList.add('pdf-first-visible');
+  return true;
+}
+
 function renderCompanyModal(){
   const f=currentFicha;
   const q = encodeURIComponent(f.name+(f.market?' '+f.market:''));
@@ -1147,6 +1321,14 @@ function renderCompanyModal(){
     <div class="tb-group">
       <span class="tb-label">Export files</span>
       <button class="btn" onclick="printSheet()">🖨 PDF</button>
+    </div>
+    <div class="tb-group no-print" id="pdfSectionsCtl">
+      <span class="tb-label">PDF contents</span>
+      <label><input type="checkbox" data-pdf-tab="perfil" checked onchange="pdfToggleTab('perfil',this.checked)"> Profile</label>
+      <label><input type="checkbox" data-pdf-tab="stats" checked onchange="pdfToggleTab('stats',this.checked)"> Statistics</label>
+      <label><input type="checkbox" data-pdf-tab="anuncios" checked onchange="pdfToggleTab('anuncios',this.checked)"> Announcements</label>
+      <button class="btn" onclick="pdfResetSections()" title="Include every tab and section in the PDF again">↺ Reset</button>
+      <span id="pdfExcludedCount"></span>
     </div>
     <div class="tb-group">
       <span class="tb-label">Research help</span>
@@ -1193,6 +1375,10 @@ function renderCompanyModal(){
     </div>
   </div>`;
   openModal(html);
+  // Toggles «In PDF / Not in PDF» por sección + observer para el contenido que
+  // llega después (campos cualitativos, estrategias por país, anuncios).
+  pdfInitSectionToggles();
+  pdfWatchSheet();
   // Las gráficas se dibujan al abrir su pestaña (fichaTab) o al imprimir (printSheet),
   // para evitar canvas de tamaño 0×0 en pestañas ocultas.
   // Carga async de campos cualitativos (no bloquea el render)
