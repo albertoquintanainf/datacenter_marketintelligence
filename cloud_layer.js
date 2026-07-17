@@ -14,13 +14,23 @@
    >>> LEER ANTES DE USAR <<<
    · Cada operador publica cosas distintas. Esto NO es un dataset normalizado por
      un tercero (eso es lo que vende TeleGeography). Los huecos son reales.
-   · Coordenadas: solo Azure las publica (coord_src=operator). El resto son
-     CENTROIDES DE CIUDAD (coord_src=gazetteer): un centroide NO es un edificio.
-     Las regiones sin ciudad publicada NO se pintan en el mapa. AWS eu-south-2 es
-     el caso claro: AWS la llama "Europe (Spain)" y no dice la ciudad.
+   · Coordenadas, TRES niveles de precision, siempre visibles y distinguibles:
+       operator  · lat/lon publicada por el operador (solo Azure) — punto relleno
+       gazetteer · centroide de la CIUDAD que el operador declara — punto discontinuo
+       country   · el operador NO publica la ciudad: marcador en el centro del PAIS,
+                   rombo hueco. NO es una ubicacion: dice "esta en este pais y no
+                   sabemos donde". Se pinta para no dar a entender que no existe.
+     El centroide de pais se calcula EN EL NAVEGADOR a partir de window.__WORLD y
+     NUNCA se escribe en cloud.js: el fichero de datos no contiene ni una sola
+     coordenada fabricada, y el CSV exportado tampoco.
+     AWS eu-south-2 es el caso claro: AWS la llama "Europe (Spain)" y no dice ciudad.
    · status: solo Azure distingue live/announced. AWS y Oracle salen todas 'live'
      porque su fuente no lo distingue — NO significa que no tengan anunciadas.
    · Sin MW, sin m2, sin PUE. Ningun operador publica capacidad por region.
+   · cfe / grid_co2: SOLO Google los publica (repo oficial region-carbon-info) y con
+     retraso — a jul-2026 el ultimo ano disponible es 2024. Son datos de la RED
+     ELECTRICA de la zona, no del datacenter. Las columnas salen vacias para el resto
+     de operadores: es un hueco real, no un fallo de carga.
    ========================================================================== */
 (function () {
   'use strict';
@@ -47,6 +57,48 @@
     var o = MKT[m] || (MKT[m] = { n: 0, live: 0, fut: 0 });
     o.n++; o.live += (r[C.live] || 0); o.fut += (r[C.uc] || 0) + (r[C.pipeline] || 0);
   });
+
+  /* ---------- centroides de pais (para regiones sin ciudad publicada) ----------
+     Se calculan aqui, en runtime, desde el GeoJSON que ya carga el dashboard.
+     No se persisten: cloud.js nunca contiene una coordenada fabricada. */
+  var ISO = (window.__MAPX && window.__MAPX.match) || {};
+  var CENTROID = (function () {
+    var out = {}, W = window.__WORLD;
+    if (!W || !W.features) return out;
+    W.features.forEach(function (f) {
+      if (!f.id || !f.geometry) return;
+      var polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates]
+        : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : [];
+      var best = null, bestA = 0;
+      polys.forEach(function (poly) {
+        var ring = poly[0]; if (!ring || ring.length < 4) return;
+        /* centroide de poligono por la formula del area con signo */
+        var a = 0, cx = 0, cy = 0;
+        for (var i = 0; i < ring.length - 1; i++) {
+          var x0 = ring[i][0], y0 = ring[i][1], x1 = ring[i + 1][0], y1 = ring[i + 1][1];
+          var cr = x0 * y1 - x1 * y0;
+          a += cr; cx += (x0 + x1) * cr; cy += (y0 + y1) * cr;
+        }
+        a *= 0.5;
+        if (!a) return;
+        /* nos quedamos con el poligono MAS GRANDE: asi el centroide de EEUU cae en
+           los 48 contiguos y no se lo llevan Alaska/Hawaii, y el de Francia no se
+           lo llevan los territorios de ultramar */
+        if (Math.abs(a) > bestA) { bestA = Math.abs(a); best = [cy / (6 * a), cx / (6 * a)]; }
+      });
+      if (best) out[f.id] = best;
+    });
+    return out;
+  })();
+
+  /* Devuelve donde y con que precision se pinta una region. */
+  function placement(r) {
+    if (r[I.lat] != null) return { lat: r[I.lat], lon: r[I.lon], kind: r[I.coord_src] };
+    var iso = ISO[r[I.market]];
+    var c = iso && CENTROID[iso];
+    if (c) return { lat: c[0], lon: c[1], kind: 'country' };
+    return { lat: null, lon: null, kind: 'none' };
+  }
 
   var fmt = function (v, d) {
     return v == null ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: d == null ? 0 : d });
@@ -92,7 +144,8 @@
       '<div><label>Coordenada</label><select id="clGeo"><option value="">All</option>' +
         '<option value="operator">Publicada por el operador</option>' +
         '<option value="gazetteer">Centroide de ciudad (derivada)</option>' +
-        '<option value="none">Sin coordenada</option></select></div>' +
+        '<option value="country">Solo centro de pais (ciudad no publicada)</option>' +
+        '<option value="none">No situable</option></select></div>' +
       '<div><label>Buscar</label><input type="text" id="clQ" placeholder="madrid, eu-south, spain…"></div>' +
     '</div>' +
     '<div class="panel" style="margin-bottom:14px">' +
@@ -116,7 +169,9 @@
         '<th data-k="csp">Operador</th><th data-k="region_id">Region id</th><th data-k="display">Nombre</th>' +
         '<th data-k="city">Ciudad</th><th data-k="market">Market (BNEF)</th><th data-k="geo_area">Area</th>' +
         '<th data-k="status">Estado</th><th data-k="year_open">Año</th>' +
-        '<th data-k="coord_src">Coordenada</th><th data-k="extra">Extra</th>' +
+        '<th data-k="coord_src">Coordenada</th>' +
+        '<th class="num" data-k="cfe">CFE %</th><th class="num" data-k="grid_co2">gCO2/kWh</th>' +
+        '<th data-k="extra">Extra</th>' +
       '</tr></thead><tbody></tbody></table></div>' +
     '</div>' +
     '<div class="panel" id="clCross"></div>';
@@ -130,8 +185,7 @@
     return R.rows.filter(function (r) {
       if (c && r[I.csp] !== c) return false;
       if (m && r[I.market] !== m) return false;
-      if (g === 'none' && r[I.coord_src] != null) return false;
-      if (g && g !== 'none' && r[I.coord_src] !== g) return false;
+      if (g && placement(r).kind !== g) return false;
       if (q && [r[I.csp], r[I.region_id], r[I.display], r[I.city], r[I.market]]
         .join(' ').toLowerCase().indexOf(q) < 0) return false;
       return true;
@@ -169,37 +223,59 @@
       });
     }
     pts = [];
-    var rows = rowsOf(), hidden = 0;
-    /* jitter determinista: varias regiones comparten centroide de ciudad y se
-       taparian entre si. Es puramente visual; el dato no cambia. */
+    var rows = rowsOf(), hidden = 0, nCountry = 0;
+    /* jitter determinista: varias regiones comparten el mismo centroide (de ciudad
+       o de pais) y se taparian entre si. Es puramente visual; el dato no cambia. */
     var seen = {};
     rows.forEach(function (r) {
-      if (r[I.lat] == null) { hidden++; return; }
-      var key = r[I.lat].toFixed(2) + ',' + r[I.lon].toFixed(2);
+      var pl = placement(r);
+      if (pl.lat == null) { hidden++; return; }
+      if (pl.kind === 'country') nCountry++;
+      var key = pl.lat.toFixed(2) + ',' + pl.lon.toFixed(2);
       var n = seen[key] = (seen[key] || 0) + 1;
-      var ang = (n - 1) * 2.4, rad = (n - 1) ? 7 : 0;
-      var p = pj(r[I.lon], r[I.lat]);
+      var ang = (n - 1) * 2.4, rad = (n - 1) ? 8 : 0;
+      var p = pj(pl.lon, pl.lat);
       p[0] += Math.cos(ang) * rad; p[1] += Math.sin(ang) * rad;
       var col = CSP_COLOR[r[I.csp]] || DIM;
-      var derived = r[I.coord_src] === 'gazetteer';
-      ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 6.2832);
-      ctx.fillStyle = derived ? col + '80' : col; ctx.fill();
-      ctx.strokeStyle = derived ? col : '#fff';
-      ctx.lineWidth = derived ? 1 : 1.3;
-      if (derived) ctx.setLineDash([2, 2]);
-      ctx.stroke(); ctx.setLineDash([]);
-      pts.push({ x: p[0], y: p[1], r: 8,
+
+      if (pl.kind === 'country') {
+        /* ROMBO HUECO: deliberadamente distinto de un punto. No dice "esta aqui",
+           dice "esta en este pais y el operador no publica donde". */
+        var d = 6;
+        ctx.beginPath();
+        ctx.moveTo(p[0], p[1] - d); ctx.lineTo(p[0] + d, p[1]);
+        ctx.lineTo(p[0], p[1] + d); ctx.lineTo(p[0] - d, p[1]);
+        ctx.closePath();
+        ctx.fillStyle = col + '26'; ctx.fill();
+        ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.setLineDash([3, 2]);
+        ctx.stroke(); ctx.setLineDash([]);
+      } else {
+        var derived = pl.kind === 'gazetteer';
+        ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 6.2832);
+        ctx.fillStyle = derived ? col + '80' : col; ctx.fill();
+        ctx.strokeStyle = derived ? col : '#fff';
+        ctx.lineWidth = derived ? 1 : 1.3;
+        if (derived) ctx.setLineDash([2, 2]);
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+      var PREC = { operator: 'coord publicada por el operador',
+                   gazetteer: 'centroide de la ciudad declarada (no es un edificio)',
+                   country: 'CIUDAD NO PUBLICADA · marcador en el centro del pais' };
+      pts.push({ x: p[0], y: p[1], r: 9,
         t: r[I.csp] + ' · ' + r[I.region_id] + '\n' + (r[I.display] || '') +
            '\n' + (r[I.city] || 'ciudad no publicada') + ' · ' + (r[I.market] || '—') +
-           '\n' + (derived ? 'coord: centroide de ciudad (derivada)' : 'coord: publicada por el operador') });
+           '\n' + PREC[pl.kind] });
     });
     el('clLegend').innerHTML = CSPS.map(function (c) {
       return '<span><b style="color:' + (CSP_COLOR[c] || DIM) + '">●</b> ' + esc(c) + '</span>';
     }).join('') +
-      '<span style="margin-left:8px">● relleno = coord del operador · ○ discontinuo = centroide de ciudad</span>' +
-      (hidden ? '<span style="color:var(--red)"><b>' + hidden + ' region(es) sin coordenada, NO representadas</b></span>' : '');
+      '<span style="margin-left:8px;border-left:1px solid var(--line);padding-left:12px">' +
+      '<b>●</b> coord del operador · <b>◌</b> centroide de ciudad · <b>◇</b> centro del pais ' +
+      '(<b>' + nCountry + '</b>: el operador no publica la ciudad)</span>' +
+      (hidden ? '<span style="color:var(--red)"><b>' + hidden +
+        ' sin pais identificable, NO representadas</b></span>' : '');
     el('clMapTitle').textContent = 'Regiones cloud por operador · ' + (rows.length - hidden) +
-      ' en el mapa de ' + rows.length;
+      ' en el mapa de ' + rows.length + (hidden ? ' · ' + hidden + ' no situables' : '');
   }
 
   (function () {
@@ -235,18 +311,21 @@
     var rows = rowsOf();
     var byC = {};
     rows.forEach(function (r) {
-      var o = byC[r[I.csp]] || (byC[r[I.csp]] = { geo: 0, no: 0 });
-      if (r[I.lat] == null) o.no++; else o.geo++;
+      var o = byC[r[I.csp]] || (byC[r[I.csp]] = { geo: 0, ct: 0, no: 0 });
+      var k = placement(r).kind;
+      if (k === 'none') o.no++; else if (k === 'country') o.ct++; else o.geo++;
     });
     var ks = Object.keys(byC).sort(function (a, b) {
-      return (byC[b].geo + byC[b].no) - (byC[a].geo + byC[a].no);
+      return (byC[b].geo + byC[b].ct + byC[b].no) - (byC[a].geo + byC[a].ct + byC[a].no);
     });
     mkChart('clC1', {
       type: 'bar',
       data: { labels: ks, datasets: [
-        { label: 'Con coordenada', data: ks.map(function (k) { return byC[k].geo; }),
+        { label: 'Ubicacion (operador o ciudad)', data: ks.map(function (k) { return byC[k].geo; }),
           backgroundColor: ks.map(function (k) { return CSP_COLOR[k] || DIM; }) },
-        { label: 'Sin coordenada', data: ks.map(function (k) { return byC[k].no; }),
+        { label: 'Solo pais', data: ks.map(function (k) { return byC[k].ct; }),
+          backgroundColor: '#e0b48a' },
+        { label: 'No situable', data: ks.map(function (k) { return byC[k].no; }),
           backgroundColor: '#cfc7bd' }
       ] },
       options: { plugins: { legend: { display: true, position: 'bottom' } },
@@ -285,7 +364,7 @@
       });
     }
     sec.querySelector('#clTable tbody').innerHTML = rows.map(function (r) {
-      var cs = r[I.coord_src];
+      var cs = r[I.coord_src], pk = placement(r).kind;
       return '<tr>' +
         '<td><span class="tag" style="color:' + (CSP_COLOR[r[I.csp]] || DIM) +
           ';border-color:var(--line)">' + esc(r[I.csp]) + '</span></td>' +
@@ -303,10 +382,16 @@
         '<td style="font-size:11px">' + (cs === 'operator'
           ? '<b style="color:#1e7a3c">operador</b>'
           : cs === 'gazetteer' ? '<span style="color:var(--dim)">centroide ciudad</span>'
-          : '<span style="color:var(--red)">ninguna</span>') + '</td>' +
+          : pk === 'country' ? '<span style="color:#c85a12">centro de pais</span>'
+          : '<span style="color:var(--red)">no situable</span>') + '</td>' +
+        '<td class="num">' + (r[I.cfe] == null ? '<span style="color:var(--dim)">—</span>'
+          : '<b style="color:' + (r[I.cfe] >= 0.8 ? '#1e7a3c' : r[I.cfe] >= 0.5 ? '#c85a12' : '#c0392b') +
+            '">' + Math.round(r[I.cfe] * 100) + '%</b>') + '</td>' +
+        '<td class="num">' + (r[I.grid_co2] == null ? '<span style="color:var(--dim)">—</span>'
+          : fmt(r[I.grid_co2], 0)) + '</td>' +
         '<td style="font-size:11px;color:var(--dim)">' + esc(r[I.extra] || '—') + '</td>' +
       '</tr>';
-    }).join('') || '<tr><td colspan="10" style="color:var(--dim)">Sin resultados.</td></tr>';
+    }).join('') || '<tr><td colspan="12" style="color:var(--dim)">Sin resultados.</td></tr>';
 
     sec.querySelectorAll('#clTable th').forEach(function (th) {
       th.addEventListener('click', function () {
@@ -360,8 +445,8 @@
       [rows.length, 'Regiones cloud'],
       [new Set(rows.map(function (r) { return r[I.csp]; })).size, 'Operadores'],
       [new Set(rows.map(function (r) { return r[I.market]; }).filter(Boolean)).size, 'Mercados'],
-      [rows.filter(function (r) { return r[I.coord_src] === 'operator'; }).length, 'Coord. del operador'],
-      [rows.filter(function (r) { return r[I.lat] == null; }).length, 'Sin coordenada'],
+      [rows.filter(function (r) { return placement(r).kind === 'operator'; }).length, 'Coord. del operador'],
+      [rows.filter(function (r) { return placement(r).kind === 'country'; }).length, 'Solo centro de pais'],
       [rows.filter(function (r) { return r[I.status] === 'announced'; }).length, 'Anunciadas (solo Azure)']
     ].map(function (k) {
       return '<div class="kpi"><div class="v">' + k[0] + '</div><div class="l">' + k[1] + '</div></div>';
@@ -429,5 +514,6 @@
   };
 
   console.info('[cloud_layer] OK · ' + R.rows.length + ' regiones · ' + CSPS.length +
-    ' operadores (' + CSPS.join(', ') + ') · ' + nogeo + ' sin coordenada · construido ' + K.meta.built);
+    ' operadores (' + CSPS.join(', ') + ') · ' + Object.keys(CENTROID).length +
+    ' centroides de pais calculados · construido ' + K.meta.built);
 })();
