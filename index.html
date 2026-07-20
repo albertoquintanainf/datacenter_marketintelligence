@@ -254,6 +254,12 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
   }
   body.print-ficha .fw-row .c{ color:#555 !important; font-weight:400; }
   body.print-ficha .fw-row .v{ color:#000 !important; font-weight:400; }
+  /* Justificar SOLO el texto narrativo de la ficha de empresa (campos cualitativos
+     con data-fk: estrategia global y estrategias por país). Las filas de datos
+     derivados no llevan data-fk, así que quedan sin tocar. */
+  body.print-ficha .fw-row[data-fk] .v-content{
+    text-align:justify !important; text-justify:inter-word;
+  }
 
   /* --- MODO 2: imprimir la pestaña activa (dashboard completo) --- */
   body.print-tab header, body.print-tab nav, body.print-tab footer,
@@ -2311,12 +2317,15 @@ function openDC(r){
   const isMan = !!r._manual;
   const srcHtml = isMan ? (/^https?:\/\//.test(r._source||'') ? `<a href="${escapeAttr(r._source)}" target="_blank" rel="noopener" style="color:var(--accent)">${escapeHTML(r._source)}</a>` : (r._source?escapeHTML(r._source):'<span class="na">—</span>')) : '';
   const manBadge = isMan ? ' <span class="man-badge-lg">USER-ADDED</span>' : '';
-  const manRows = isMan ? (fwRow('Source (user-added)', srcHtml) + fwRow('Added by', (r._addedBy?escapeHTML(r._addedBy):'—')+(r._addedAt?' · '+fmtWhen(r._addedAt):''))) : '';
+  const editedInfo = (isMan && r._editedBy) ? ('<br><span class="mini" style="color:var(--dim)">Last edited by '+escapeHTML(r._editedBy)+(r._editedAt?' · '+fmtWhen(r._editedAt):'')+'</span>') : '';
+  const manRows = isMan ? (fwRow('Source (user-added)', srcHtml) + fwRow('Added by', (r._addedBy?escapeHTML(r._addedBy):'—')+(r._addedAt?' · '+fmtWhen(r._addedAt):'')+editedInfo)) : '';
+  const canManage = isMan && window.Collab && window.Collab.isAuthorized && window.Collab.isAuthorized();
+  const manageBtns = canManage ? `<button class="btn" onclick="editDCByIdx(${R.indexOf(r)})">✎ Edit</button><button class="btn" onclick="deleteDCByIdx(${R.indexOf(r)})">🗑 Delete</button>` : '';
   const html=`
   <h2>${r[C.name]||'—'}${manBadge} <span class="mini">· ${r[C.company]||''}</span></h2>
   <div class="sub">${r[C.market]||''}${r[C.usstate]?' · '+r[C.usstate]:''} · ${r[C.region]||''} · ${r[C.lat]!=null?r[C.lat]+', '+r[C.lon]:''}</div>
   ${isMan?'<div class="mini" style="color:#ee6f2c;margin:-4px 0 8px">⚠ Added manually by a user — not part of the BNEF database. Verify against the source.</div>':''}
-  <div class="toolbar"><button class="btn" onclick="printSheet()">🖨 Print / save PDF</button></div>
+  <div class="toolbar"><button class="btn" onclick="printSheet()">🖨 Print / save PDF</button>${manageBtns}</div>
   <div class="fw-cat"><h4>Facility profile</h4>
     ${manRows}
     ${fwRow('Status · category', `${r[C.status]||'—'} · ${r[C.category]||'—'}${r[C.subcategory]?' / '+r[C.subcategory]:''}`)}
@@ -3024,6 +3033,8 @@ function manualDCToRow(d){
   if(d.lon!=null && d.lon!=='') row[C.lon]=+d.lon;
   row[C.cluster]=-1; row[C.series]=[];
   row._manual=true; row._source=d.source||''; row._addedBy=d.addedBy||''; row._addedAt=d.addedAt||'';
+  row._editedBy=d.editedBy||''; row._editedAt=d.editedAt||'';
+  row._mdc=d; // referencia inversa al objeto persistido en MANUAL_DCS (para editar/eliminar)
   return row;
 }
 function rebuildManualDCRows(){
@@ -3059,8 +3070,9 @@ function addCompanyFromDCEditor(btn){
   });
 }
 window.addCompanyFromDCEditor = addCompanyFromDCEditor;
-function openAddDCModal(prefill){
-  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){ alert('You must sign in with the shared password to add a data center.'); return; }
+function openAddDCModal(prefill, editRef){
+  const isEdit = !!editRef;
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){ alert('You must sign in with the shared password to '+(isEdit?'edit':'add')+' a data center.'); return; }
   prefill = prefill||{};
   const _mapx=(window.__MAPX||{}), _match=_mapx.match||{}, _agg=_mapx.agg||{};
   const countryNames = Object.keys(_match).sort((x,y)=>x.localeCompare(y));
@@ -3076,8 +3088,8 @@ function openAddDCModal(prefill){
       .annEditSheet select{height:40px}
     </style>
     <button class="close" onclick="this.closest('.modal').remove()" style="float:right;background:none;border:none;font-size:22px;cursor:pointer">×</button>
-    <h3 style="margin:0 0 4px">Add a data center</h3>
-    <div class="mini" style="color:var(--dim);margin-bottom:14px">For a facility not in the BNEF database. It will be clearly flagged as user-added, and a source is required.</div>
+    <h3 style="margin:0 0 4px">${isEdit?'Edit data center':'Add a data center'}</h3>
+    <div class="mini" style="color:var(--dim);margin-bottom:14px">${isEdit?'Editing a user-added facility. It remains flagged as user-added, and a source is required.':'For a facility not in the BNEF database. It will be clearly flagged as user-added, and a source is required.'}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px 18px">
       <label style="grid-column:1/-1">Company *
         <div style="display:flex;gap:8px;align-items:center">
@@ -3099,10 +3111,18 @@ function openAddDCModal(prefill){
     <div id="_dc_err" style="color:#c0392b;font-size:12px;min-height:16px;margin:10px 0 4px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn" onclick="this.closest('.modal').remove()">Cancel</button>
-      <button class="btn primary" id="_dc_save">Add data center</button>
+      <button class="btn primary" id="_dc_save">${isEdit?'Save changes':'Add data center'}</button>
     </div>
   </div>`;
   document.body.appendChild(modal);
+  if(isEdit){
+    // Rellenar explícitamente todos los campos (status/segmento y numéricos no llevan prefill por defecto)
+    const setV=(id,v)=>{ const el=modal.querySelector('#_dc_'+id); if(el && v!=null && v!==undefined) el.value=v; };
+    setV('company', editRef.company); setV('name', editRef.name); setV('country', editRef.market);
+    setV('status', editRef.status); setV('subcat', editRef.subcategory); setV('firstlive', editRef.firstlive);
+    setV('live', editRef.live); setV('uc', editRef.uc); setV('pipeline', editRef.pipeline);
+    setV('land', editRef.land); setV('source', editRef.source);
+  }
   modal.querySelector('#_dc_save').onclick = async ()=>{
     const err=modal.querySelector('#_dc_err'); err.textContent='';
     const g=id=>{ const el=modal.querySelector('#_dc_'+id); return el?el.value.trim():''; };
@@ -3118,19 +3138,66 @@ function openAddDCModal(prefill){
     const who=(window.Collab.user&&window.Collab.user())?window.Collab.user().name:'';
     const dc={ name, company, market, region, iso3, status:g('status'), subcategory:g('subcat'), category:'',
       live:+g('live')||0, uc:+g('uc')||0, pipeline:+g('pipeline')||0, firstlive:g('firstlive'),
-      land:(g('land')!==''?+g('land'):null), source, addedBy:who, addedAt:new Date().toISOString() };
+      land:(g('land')!==''?+g('land'):null), source,
+      addedBy:(isEdit && editRef.addedBy)?editRef.addedBy:who,
+      addedAt:(isEdit && editRef.addedAt)?editRef.addedAt:new Date().toISOString() };
+    if(isEdit){ dc.editedBy=who; dc.editedAt=new Date().toISOString(); }
+    let prevIdx=-1;
     try{
-      MANUAL_DCS.push(dc);
+      if(isEdit){
+        prevIdx=MANUAL_DCS.indexOf(editRef);
+        if(prevIdx>=0) MANUAL_DCS[prevIdx]=dc; else MANUAL_DCS.push(dc);
+      }else{
+        MANUAL_DCS.push(dc);
+      }
       await persistManualDCs();
       rebuildManualDCRows();
       if(typeof applyFilters==='function') applyFilters();
       if(typeof renderCompanies==='function') renderCompanies();
       modal.remove();
-      alert('Data center added and flagged as user-added.');
-    }catch(e){ console.error('add DC failed', e); MANUAL_DCS.pop(); err.textContent='Save error: '+(e.message||e); }
+      alert(isEdit?'Data center updated.':'Data center added and flagged as user-added.');
+    }catch(e){
+      console.error((isEdit?'edit':'add')+' DC failed', e);
+      if(isEdit){ if(prevIdx>=0) MANUAL_DCS[prevIdx]=editRef; } else { MANUAL_DCS.pop(); }
+      err.textContent='Save error: '+(e.message||e);
+    }
   };
 }
 window.openAddDCModal = openAddDCModal;
+
+/* ---------- Editar / eliminar data centers añadidos manualmente ----------
+ * Operan sobre una fila de R (que lleva _mdc apuntando al objeto persistido).
+ * Requieren sesión, igual que el alta, y persisten con el mismo mecanismo. */
+function editDC(r){
+  if(!r || !r._manual || !r._mdc) return;
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){ alert('You must sign in with the shared password to edit a data center.'); return; }
+  if(typeof closeModal==='function') closeModal();   // cierra la ficha antes de abrir el editor
+  openAddDCModal(r._mdc, r._mdc);
+}
+async function deleteDC(r){
+  if(!r || !r._manual || !r._mdc) return;
+  if(!window.Collab || !window.Collab.isAuthorized || !window.Collab.isAuthorized()){ alert('You must sign in with the shared password to delete a data center.'); return; }
+  const label=(r[C.name]||'this data center')+(r[C.company]?(' · '+r[C.company]):'');
+  if(!confirm('Delete “'+label+'”?\n\nThis user-added entry will be permanently removed for everyone. This cannot be undone.')) return;
+  const idx=MANUAL_DCS.indexOf(r._mdc);
+  if(idx<0){ alert('Entry not found — it may have already been removed.'); return; }
+  const removed=MANUAL_DCS.splice(idx,1)[0];
+  try{
+    await persistManualDCs();
+    rebuildManualDCRows();
+    if(typeof applyFilters==='function') applyFilters();
+    if(typeof renderCompanies==='function') renderCompanies();
+    if(typeof closeModal==='function') closeModal();
+  }catch(e){
+    console.error('delete DC failed', e);
+    MANUAL_DCS.splice(idx,0,removed);   // rollback
+    alert('Delete error: '+(e.message||e));
+  }
+}
+window.editDC = editDC;
+window.deleteDC = deleteDC;
+window.editDCByIdx = i=>editDC(R[i]);
+window.deleteDCByIdx = i=>deleteDC(R[i]);
 
 
 // Actividad qualitative (ediciones de ficha) agregada por empresa, para la columna "Team activity".
