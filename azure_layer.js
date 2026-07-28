@@ -25,7 +25,7 @@
 
   if (typeof window.__DATA === 'undefined') return;
   if (typeof window.__AZURE === 'undefined') {
-    console.info('[azure_layer] window.__AZURE no encontrado — pestana Microsoft Azure desactivada.');
+    console.info('[azure_layer] window.__AZURE not found - Microsoft Azure tab disabled.');
     return;
   }
 
@@ -46,6 +46,12 @@
                 'Greece', 'Portugal', 'Czech Republic', 'Hungary', 'Romania'];
   var isEU = function (m) { return EU_MKT.indexOf(m) >= 0; };
 
+  /* azure.js nombra dos paises distinto que BNEF; sin alias salian en rojo como
+     "no match" en la tabla de cruce, con guiones en DCs y MW aunque BNEF si
+     tiene esos mercados. Correccion de nomenclatura, no dato nuevo. */
+  var MKT_ALIAS = { 'UAE': 'United Arab Emirates', 'China': 'Mainland China' };
+  var mkt = function (m) { return m ? (MKT_ALIAS[m] || m) : m; };
+
   /* ---------- agregado BNEF por market ---------- */
   var MKT = {};
   D.rows.forEach(function (r) {
@@ -53,7 +59,7 @@
     var o = MKT[m] || (MKT[m] = { n: 0, live: 0, fut: 0 });
     o.n++; o.live += (r[C.live] || 0); o.fut += (r[C.uc] || 0) + (r[C.pipeline] || 0);
   });
-  var NOMATCH = Array.from(new Set(REG.rows.map(function (r) { return r[RI.market]; })
+  var NOMATCH = Array.from(new Set(REG.rows.map(function (r) { return mkt(r[RI.market]); })
     .filter(function (m) { return m && !MKT[m]; })));
 
   var fmt = function (v, d) {
@@ -86,19 +92,49 @@
   var TECHS = Array.from(new Set(PPA.rows.map(function (r) { return r[PI.tech]; }).filter(Boolean))).sort();
   var FYS = Array.from(new Set(PPA.rows.map(function (r) { return r[PI.fy]; }).filter(Boolean))).sort();
 
+  var MAP_VIEWS = {
+    World:            { lon0: -170, lon1: 190, lat0: -58, lat1: 82 },
+    Europe:           { lon0: -12,  lon1: 42,  lat0: 34,  lat1: 71 },
+    'North America':  { lon0: -168, lon1: -52, lat0: 14,  lat1: 72 },
+    'Latin America':  { lon0: -118, lon1: -34, lat0: -56, lat1: 33 },
+    'Asia-Pacific':   { lon0: 60,   lon1: 180, lat0: -48, lat1: 55 },
+    'Middle East':    { lon0: 24,   lon1: 65,  lat0: 12,  lat1: 43 },
+    Africa:           { lon0: -20,  lon1: 54,  lat0: -36, lat1: 38 }
+  };
+
+  /* La proyeccion es equirectangular simple: si el encuadre no tiene la misma
+     relacion que el canvas, el continente sale estirado. Se ensancha el lado
+     corto hasta cuadrar. Efecto lateral: las vistas altas y estrechas muestran
+     contexto de mas alrededor. */
+  function fitView(v, W, H) {
+    var lon0 = v.lon0, lon1 = v.lon1, lat0 = v.lat0, lat1 = v.lat1;
+    var want = W / H, have = (lon1 - lon0) / (lat1 - lat0);
+    if (have < want) {
+      var dLon = ((lat1 - lat0) * want - (lon1 - lon0)) / 2;
+      lon0 -= dLon; lon1 += dLon;
+    } else if (have > want) {
+      var dLat = ((lon1 - lon0) / want - (lat1 - lat0)) / 2;
+      lat0 -= dLat; lat1 += dLat;
+    }
+    return { lon0: lon0, lon1: lon1, lat0: lat0, lat1: lat1 };
+  }
+
   sec.innerHTML =
-    '<div class="toolbar"><div class="tb-group"><span class="tb-label">Vista Azure</span>' +
+    '<div class="toolbar"><div class="tb-group"><span class="tb-label">Azure view</span>' +
       '<button class="btn primary" data-v="reg">Regions</button>' +
       '<button class="btn" data-v="ppa">Renewable PPAs</button>' +
       '<button class="btn" data-v="pop">Network PoPs</button></div>' +
-      '<div class="tb-group"><span class="tb-label">Mapa</span>' +
-      '<button class="btn primary" data-m="world">World</button>' +
-      '<button class="btn" data-m="Europe">Europe</button></div>' +
+      '<div class="tb-group"><span class="tb-label">Map</span>' +
+      '<select id="azMapView" style="font-family:inherit;font-size:12px;padding:4px 6px;' +
+        'border:1px solid var(--line);border-radius:3px">' +
+        Object.keys(MAP_VIEWS).map(function (k) {
+          return '<option value="' + k + '">' + k + '</option>';
+        }).join('') + '</select></div>' +
       '<div class="tb-group" style="margin-left:auto"><button class="btn" id="azCsv">Export CSV</button></div>' +
     '</div>' +
     '<div class="kpis" id="azKpis"></div>' +
     '<div class="panel" style="margin-bottom:14px">' +
-      '<h3 id="azMapTitle">Microsoft Azure — mapa</h3>' +
+      '<h3 id="azMapTitle">Microsoft Azure — map</h3>' +
       '<canvas id="azCanvas" width="1000" height="500" style="display:block;width:100%;background:#f0ece7;' +
         'border:1px solid var(--line);border-radius:4px"></canvas>' +
       '<div id="azTip" style="display:none;position:fixed;z-index:60;background:#fff;border:1px solid var(--line);' +
@@ -119,21 +155,19 @@
     '<div class="panel" id="azCross"></div>';
 
   var el = function (id) { return document.getElementById(id); };
-  var view = 'reg', mapView = 'world', sortK = null, sortDir = 1;
+  var view = 'reg', mapView = 'World', sortK = null, sortDir = 1;
   var charts = {}, mapPts = [];
 
   /* =========================================================================
      MAPA (canvas propio, autocontenido: solo usa window.__WORLD)
      ====================================================================== */
-  var VIEWS_GEO = {
-    world: { lon0: -170, lon1: 190, lat0: -58, lat1: 82 },
-    Europe: { lon0: -12, lon1: 42, lat0: 34, lat1: 72 }
-  };
 
   function drawMap() {
     var cv = el('azCanvas'); if (!cv) return;
     var ctx = cv.getContext('2d'); if (!ctx) return;
-    var W = cv.width, H = cv.height, v = VIEWS_GEO[mapView];
+    var W = cv.width, H = cv.height;
+    var v = fitView(MAP_VIEWS[mapView] || MAP_VIEWS.World, W, H);
+    var offview = 0;
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#f0ece7'; ctx.fillRect(0, 0, W, H);
 
@@ -163,7 +197,7 @@
       });
     } else {
       ctx.fillStyle = DIM; ctx.font = '13px monospace';
-      ctx.fillText('window.__WORLD no disponible — mapa base no dibujado', 20, 30);
+      ctx.fillText('window.__WORLD not available — base map not drawn', 20, 30);
     }
 
     mapPts = [];
@@ -175,7 +209,7 @@
       rows.slice().sort(function (a, b) { return (b[PI.mw] || 0) - (a[PI.mw] || 0); }).forEach(function (r) {
         if (r[PI.lat] == null) return;
         var p = pj(r[PI.lon], r[PI.lat]);
-        if (p[0] < -20 || p[0] > W + 20 || p[1] < -20 || p[1] > H + 20) return;
+        if (p[0] < -20 || p[0] > W + 20 || p[1] < -20 || p[1] > H + 20) { offview++; return; }
         var rad = 3 + 17 * Math.sqrt((r[PI.mw] || 0) / mx);
         var col = TECH_COLOR[r[PI.tech]] || DIM;
         ctx.beginPath(); ctx.arc(p[0], p[1], rad, 0, 6.2832);
@@ -189,7 +223,7 @@
       rows.forEach(function (r) {
         if (r[OI.lat] == null) return;
         var p = pj(r[OI.lon], r[OI.lat]);
-        if (p[0] < -10 || p[0] > W + 10 || p[1] < -10 || p[1] > H + 10) return;
+        if (p[0] < -10 || p[0] > W + 10 || p[1] < -10 || p[1] > H + 10) { offview++; return; }
         ctx.beginPath(); ctx.arc(p[0], p[1], 3.2, 0, 6.2832);
         ctx.fillStyle = TEAL; ctx.globalAlpha = 0.75; ctx.fill(); ctx.globalAlpha = 1;
         mapPts.push({ x: p[0], y: p[1], r: 6, t: r[OI.id] + '\n' + (r[OI.city] || '') + ' · ' + (r[OI.market] || '') });
@@ -198,7 +232,7 @@
       rows.forEach(function (r) {
         if (r[RI.lat] == null) return;
         var p = pj(r[RI.lon], r[RI.lat]);
-        if (p[0] < -10 || p[0] > W + 10 || p[1] < -10 || p[1] > H + 10) return;
+        if (p[0] < -10 || p[0] > W + 10 || p[1] < -10 || p[1] > H + 10) { offview++; return; }
         var open = r[RI.is_open];
         ctx.beginPath(); ctx.arc(p[0], p[1], open ? 6 : 6.5, 0, 6.2832);
         if (open) { ctx.fillStyle = ACCENT; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.stroke(); }
@@ -207,27 +241,27 @@
           ctx.strokeStyle = AMBER; ctx.lineWidth = 2; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
         }
         mapPts.push({ x: p[0], y: p[1], r: 9,
-          t: r[RI.display] + '\n' + (r[RI.location] || '') + ' · ' + (open ? 'abierta ' + (r[RI.year_open] || '') : 'anunciada, no abierta') +
+          t: r[RI.display] + '\n' + (r[RI.location] || '') + ' · ' + (open ? 'open ' + (r[RI.year_open] || '') : 'announced, not open') +
              '\nAZ: ' + (r[RI.az_status] || '—') });
       });
     }
 
     /* leyenda */
     var lg = {
-      reg: '<span><b style="color:' + ACCENT + '">●</b> Region Azure abierta</span>' +
-           '<span><b style="color:' + AMBER + '">○</b> Anunciada, no abierta</span>' +
-           '<span>Coordenada = centro de ciudad, no un edificio</span>',
+      reg: '<span><b style="color:' + ACCENT + '">●</b> Azure region, open</span>' +
+           '<span><b style="color:' + AMBER + '">○</b> Announced, not open</span>' +
+           '<span>Coordinates = city centre, not a building</span>',
       ppa: '<span><b style="color:' + TECH_COLOR.solar + '">●</b> Solar</span>' +
-           '<span><b style="color:' + TECH_COLOR.wind + '">●</b> Eolica</span>' +
-           '<span><b style="color:' + TECH_COLOR.mixed + '">●</b> Mixta</span>' +
-           '<span>Area de la burbuja ∝ MW de <b>generacion</b> contratada (no IT load)</span>',
-      pop: '<span><b style="color:' + TEAL + '">●</b> Punto de presencia de red</span>' +
-           '<span>No son datacenters ni tienen capacidad asociada</span>'
+           '<span><b style="color:' + TECH_COLOR.wind + '">●</b> Wind</span>' +
+           '<span><b style="color:' + TECH_COLOR.mixed + '">●</b> Mixed</span>' +
+           '<span>Bubble area ∝ MW of contracted <b>generation</b> (not IT load)</span>',
+      pop: '<span><b style="color:' + TEAL + '">●</b> Network point of presence</span>' +
+           '<span>These are not datacenters and have no associated capacity</span>'
     }[view];
     el('azLegend').innerHTML = lg;
     el('azMapTitle').textContent = 'Microsoft Azure — ' +
-      { reg: 'regiones', ppa: 'proyectos renovables contratados (PPA)', pop: 'puntos de presencia de red' }[view] +
-      ' · vista ' + mapView;
+      { reg: 'regions', ppa: 'contracted renewable projects (PPA)', pop: 'network points of presence' }[view] +
+      ' · ' + mapView + (offview ? ' · ' + offview + ' outside this view' : '');
   }
 
   /* tooltip del mapa */
@@ -270,7 +304,7 @@
   function drawCharts() {
     var rows = rowsOf();
     if (view === 'reg') {
-      el('azC1Title').textContent = 'Regiones Azure por continente';
+      el('azC1Title').textContent = 'Azure regions by continent';
       var byC = {};
       rows.forEach(function (r) {
         var k = r[RI.continent] || '—';
@@ -283,14 +317,14 @@
       mkChart('azC1', {
         type: 'bar',
         data: { labels: ks, datasets: [
-          { label: 'Abiertas', data: ks.map(function (k) { return byC[k].open; }), backgroundColor: ACCENT },
-          { label: 'Anunciadas', data: ks.map(function (k) { return byC[k].ann; }), backgroundColor: AMBER }
+          { label: 'Open', data: ks.map(function (k) { return byC[k].open; }), backgroundColor: ACCENT },
+          { label: 'Announced', data: ks.map(function (k) { return byC[k].ann; }), backgroundColor: AMBER }
         ] },
         options: { plugins: { legend: { display: true, position: 'bottom' } },
           scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
       });
 
-      el('azC2Title').textContent = 'Aperturas de region Azure por ano (acumulado)';
+      el('azC2Title').textContent = 'Azure region openings by year (cumulative)';
       var yrs = {};
       rows.forEach(function (r) {
         var y = parseInt(r[RI.year_open], 10);
@@ -300,13 +334,13 @@
       var cum = 0, cums = ys.map(function (y) { cum += yrs[y]; return cum; });
       mkChart('azC2', {
         type: 'line',
-        data: { labels: ys, datasets: [{ label: 'Acumulado', data: cums, borderColor: ACCENT,
+        data: { labels: ys, datasets: [{ label: 'Cumulative', data: cums, borderColor: ACCENT,
           backgroundColor: 'rgba(238,111,44,.12)', fill: true, tension: .25, pointRadius: 2 }] },
         options: { plugins: NOLEG, scales: { y: { beginAtZero: true } } }
       });
 
     } else if (view === 'ppa') {
-      el('azC1Title').textContent = 'MW de generacion contratada por tecnologia';
+      el('azC1Title').textContent = 'MW of contracted generation by technology';
       var byT = {};
       rows.forEach(function (r) { byT[r[PI.tech]] = (byT[r[PI.tech]] || 0) + (r[PI.mw] || 0); });
       var tk = Object.keys(byT);
@@ -317,7 +351,7 @@
         options: { plugins: { legend: { display: true, position: 'right' } } }
       });
 
-      el('azC2Title').textContent = 'Top 12 paises por MW de generacion contratada';
+      el('azC2Title').textContent = 'Top 12 countries by MW of contracted generation';
       var byK = {};
       rows.forEach(function (r) {
         var k = r[PI.country] || '—';
@@ -333,7 +367,7 @@
       });
 
     } else {
-      el('azC1Title').textContent = 'Top 12 paises por numero de PoPs';
+      el('azC1Title').textContent = 'Top 12 countries by number of PoPs';
       var byM = {};
       rows.forEach(function (r) { var k = r[OI.market] || '—'; byM[k] = (byM[k] || 0) + 1; });
       var mk = Object.keys(byM).sort(function (a, b) { return byM[b] - byM[a]; }).slice(0, 12);
@@ -344,11 +378,11 @@
         options: { indexAxis: 'y', plugins: NOLEG, scales: { x: { beginAtZero: true } } }
       });
 
-      el('azC2Title').textContent = 'PoPs por continente (via market BNEF)';
+      el('azC2Title').textContent = 'PoPs by continent (via BNEF market)';
       var reg2 = {};
       rows.forEach(function (r) {
-        var m = r[OI.market], k = isEU(m) ? 'Europa' : (m === 'US' || m === 'Canada' || m === 'Mexico' ||
-          m === 'Brazil' || m === 'Chile' || m === 'Colombia') ? 'America' : m ? 'Resto' : '—';
+        var m = r[OI.market], k = isEU(m) ? 'Europe' : (m === 'US' || m === 'Canada' || m === 'Mexico' ||
+          m === 'Brazil' || m === 'Chile' || m === 'Colombia') ? 'Americas' : m ? 'Rest of world' : '—';
         reg2[k] = (reg2[k] || 0) + 1;
       });
       var rk = Object.keys(reg2);
@@ -366,21 +400,21 @@
      ====================================================================== */
   var VIEWS = {
     reg: {
-      title: 'Microsoft Azure · regiones',
+      title: 'Microsoft Azure · regions',
       tbl: REG, I: RI,
-      filters: '<div><label>Continente</label><select id="f1"><option value="">All</option>' +
+      filters: '<div><label>Continent</label><select id="f1"><option value="">All</option>' +
         CONTS.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
-        '<div><label>Estado</label><select id="f2"><option value="">All</option>' +
-        '<option value="open">Abiertas</option><option value="ann">Anunciadas (no abiertas)</option></select></div>' +
+        '<div><label>Status</label><select id="f2"><option value="">All</option>' +
+        '<option value="open">Open</option><option value="ann">Announced (not open)</option></select></div>' +
         '<div><label>Availability zones</label><select id="f3"><option value="">All</option>' +
         '<option value="available">available</option><option value="nearest">nearest</option>' +
         '<option value="soon">soon</option></select></div>' +
-        '<div><label>Buscar</label><input type="text" id="fq" placeholder="madrid, spain, uksouth…"></div>',
+        '<div><label>Search</label><input type="text" id="fq" placeholder="madrid, spain, uksouth…"></div>',
       warn: '',
       head: [['display', 'Region'], ['id', 'Azure id'], ['location', 'Location'], ['market', 'Market (BNEF)'],
              ['continent', 'Continent'], ['is_open', 'Open'], ['year_open', 'Year'], ['az_status', 'AZ'],
              ['n_compliance', 'Compl.', 1], ['data_residency', 'Data residency'],
-             ['lat', 'Lat', 1], ['lon', 'Lon', 1], ['announcement_link', 'Anuncio']],
+             ['lat', 'Lat', 1], ['lon', 'Lon', 1], ['announcement_link', 'Announcement']],
       match: function (r) {
         var f1 = el('f1').value, f2 = el('f2').value, f3 = el('f3').value;
         var q = el('fq').value.trim().toLowerCase();
@@ -393,31 +427,31 @@
         return true;
       },
       kpis: function (rows) {
-        return [[rows.length, 'Regiones Azure'],
-                [rows.filter(function (r) { return r[RI.is_open]; }).length, 'Abiertas'],
-                [rows.filter(function (r) { return !r[RI.is_open]; }).length, 'Anunciadas, no abiertas'],
-                [rows.filter(function (r) { return r[RI.continent] === 'europe'; }).length, 'En Europa'],
-                [new Set(rows.map(function (r) { return r[RI.market]; })).size, 'Paises']];
+        return [[rows.length, 'Azure regions'],
+                [rows.filter(function (r) { return r[RI.is_open]; }).length, 'Open'],
+                [rows.filter(function (r) { return !r[RI.is_open]; }).length, 'Announced, not open'],
+                [rows.filter(function (r) { return r[RI.continent] === 'europe'; }).length, 'In Europe'],
+                [new Set(rows.map(function (r) { return r[RI.market]; })).size, 'Countries']];
       }
     },
     ppa: {
-      title: 'Microsoft Azure · proyectos renovables contratados (PPA)',
+      title: 'Microsoft Azure · contracted renewable projects (PPA)',
       tbl: PPA, I: PI,
-      filters: '<div><label>Tecnologia</label><select id="f1"><option value="">All</option>' +
+      filters: '<div><label>Technology</label><select id="f1"><option value="">All</option>' +
         TECHS.map(function (t) { return '<option>' + esc(t) + '</option>'; }).join('') + '</select></div>' +
         '<div><label>Fiscal year</label><select id="f2"><option value="">All</option>' +
         FYS.map(function (t) { return '<option>' + esc(t) + '</option>'; }).join('') + '</select></div>' +
-        '<div><label>Ambito</label><select id="f3"><option value="">All</option>' +
-        '<option value="eu">Solo Europa</option></select></div>' +
-        '<div><label>Buscar</label><input type="text" id="fq" placeholder="spain, wind, solar…"></div>',
+        '<div><label>Scope</label><select id="f3"><option value="">All</option>' +
+        '<option value="eu">Europe only</option></select></div>' +
+        '<div><label>Search</label><input type="text" id="fq" placeholder="spain, wind, solar…"></div>',
       warn: '<p style="background:#fdecec;border:1px solid #f5b7b1;color:#c0392b;padding:9px 12px;' +
-        'border-radius:3px;font-size:12px;margin-bottom:12px"><b>MW de GENERACION, no de IT load.</b> ' +
-        'Capacidad renovable contratada por Microsoft via PPA. No es capacidad de datacenter y ' +
-        '<u>no se puede sumar ni comparar</u> con los MW de BNEF de las pestanas 02-06. ' +
-        'El fiscal year de Microsoft cierra el 30 de junio: FY26+ son contratos futuros.</p>',
-      head: [['name', 'Proyecto'], ['tech', 'Tecnologia'], ['mw', 'MW gen.', 1], ['country', 'Pais'],
-             ['fy', 'FY'], ['lat', 'Lat', 1], ['lon', 'Lon', 1], ['description', 'Descripcion'],
-             ['link', 'Fuente']],
+        'border-radius:3px;font-size:12px;margin-bottom:12px"><b>MW of GENERATION, not IT load.</b> ' +
+        'Renewable capacity contracted by Microsoft through PPAs. This is not datacenter capacity and ' +
+        '<u>cannot be added to or compared with</u> the BNEF MW shown in tabs 02-06. ' +
+        'Microsoft\'s fiscal year ends on 30 June: FY26+ are future contracts.</p>',
+      head: [['name', 'Project'], ['tech', 'Technology'], ['mw', 'MW gen.', 1], ['country', 'Country'],
+             ['fy', 'FY'], ['lat', 'Lat', 1], ['lon', 'Lon', 1], ['description', 'Description'],
+             ['link', 'Source']],
       match: function (r) {
         var f1 = el('f1').value, f2 = el('f2').value, f3 = el('f3').value;
         var q = el('fq').value.trim().toLowerCase();
@@ -432,22 +466,22 @@
         var mw = function (f) {
           return rows.filter(f).reduce(function (a, r) { return a + (r[PI.mw] || 0); }, 0);
         };
-        return [[rows.length, 'Proyectos'],
-                [fmt(mw(function () { return true; }), 0) + ' MW', 'Generacion contratada'],
+        return [[rows.length, 'Projects'],
+                [fmt(mw(function () { return true; }), 0) + ' MW', 'Contracted generation'],
                 [fmt(mw(function (r) { return r[PI.tech] === 'solar'; }), 0) + ' MW', 'Solar'],
-                [fmt(mw(function (r) { return r[PI.tech] === 'wind'; }), 0) + ' MW', 'Eolica'],
-                [fmt(mw(function (r) { return isEU(r[PI.market]); }), 0) + ' MW', 'Europa']];
+                [fmt(mw(function (r) { return r[PI.tech] === 'wind'; }), 0) + ' MW', 'Wind'],
+                [fmt(mw(function (r) { return isEU(r[PI.market]); }), 0) + ' MW', 'Europe']];
       }
     },
     pop: {
-      title: 'Microsoft Azure · puntos de presencia de red (PoPs)',
+      title: 'Microsoft Azure · network points of presence (PoPs)',
       tbl: POP, I: OI,
-      filters: '<div><label>Ambito</label><select id="f3"><option value="">All</option>' +
-        '<option value="eu">Solo Europa</option></select></div>' +
-        '<div><label>Buscar</label><input type="text" id="fq" placeholder="madrid, spain…"></div>',
-      warn: '<p style="font-size:11.5px;color:var(--dim);margin-bottom:10px">PoP = punto de presencia de red ' +
-        '(peering / edge) de Microsoft, <b>no</b> un datacenter. Sin capacidad asociada.</p>',
-      head: [['id', 'PoP'], ['city', 'Ciudad'], ['market', 'Market (BNEF)'], ['lat', 'Lat', 1], ['lon', 'Lon', 1]],
+      filters: '<div><label>Scope</label><select id="f3"><option value="">All</option>' +
+        '<option value="eu">Europe only</option></select></div>' +
+        '<div><label>Search</label><input type="text" id="fq" placeholder="madrid, spain…"></div>',
+      warn: '<p style="font-size:11.5px;color:var(--dim);margin-bottom:10px">PoP = Microsoft network point of ' +
+        'presence (peering / edge), <b>not</b> a datacenter. No associated capacity.</p>',
+      head: [['id', 'PoP'], ['city', 'City'], ['market', 'Market (BNEF)'], ['lat', 'Lat', 1], ['lon', 'Lon', 1]],
       match: function (r) {
         var f3 = el('f3') ? el('f3').value : '';
         var q = el('fq').value.trim().toLowerCase();
@@ -456,11 +490,11 @@
         return [r[OI.id], r[OI.city], r[OI.market]].join(' ').toLowerCase().indexOf(q) >= 0;
       },
       kpis: function (rows) {
-        return [[rows.length, 'PoPs Azure'],
-                [new Set(rows.map(function (r) { return r[OI.market]; })).size, 'Paises'],
-                [new Set(rows.map(function (r) { return r[OI.city]; })).size, 'Ciudades'],
-                [rows.filter(function (r) { return isEU(r[OI.market]); }).length, 'En Europa'],
-                [rows.filter(function (r) { return r[OI.market] === 'Spain'; }).length, 'En Espana']];
+        return [[rows.length, 'Azure PoPs'],
+                [new Set(rows.map(function (r) { return r[OI.market]; })).size, 'Countries'],
+                [new Set(rows.map(function (r) { return r[OI.city]; })).size, 'Cities'],
+                [rows.filter(function (r) { return isEU(r[OI.market]); }).length, 'In Europe'],
+                [rows.filter(function (r) { return r[OI.market] === 'Spain'; }).length, 'In Spain']];
       }
     }
   };
@@ -472,7 +506,7 @@
      ====================================================================== */
   function renderTable() {
     var V = VIEWS[view], I = V.I, base = rowsOf();
-    el('azTitle').textContent = V.title + ' · ' + base.length + ' de ' + V.tbl.rows.length;
+    el('azTitle').textContent = V.title + ' · ' + base.length + ' of ' + V.tbl.rows.length;
     el('azWarn').innerHTML = V.warn;
 
     var rows = base.slice();
@@ -493,20 +527,20 @@
     sec.querySelector('#azTable tbody').innerHTML = rows.map(function (r) {
       return '<tr>' + V.head.map(function (h) {
         var k = h[0], val = r[I[k]];
-        if (k === 'announcement_link' || k === 'link') return '<td>' + link(val, 'ver') + '</td>';
-        if (k === 'is_open') return '<td>' + (val ? '<span class="tag amer">abierta</span>'
-          : '<span class="tag" style="color:#c85a12;border-color:#ecd9ae">anunciada</span>') + '</td>';
+        if (k === 'announcement_link' || k === 'link') return '<td>' + link(val, 'view') + '</td>';
+        if (k === 'is_open') return '<td>' + (val ? '<span class="tag amer">open</span>'
+          : '<span class="tag" style="color:#c85a12;border-color:#ecd9ae">announced</span>') + '</td>';
         if (k === 'tech') return '<td><span class="tag" style="color:' + (TECH_COLOR[val] || DIM) +
           ';border-color:var(--line)">' + esc(val) + '</span></td>';
-        if (k === 'market') return '<td>' + (MKT[val] ? esc(val)
-          : '<span style="color:var(--red)">' + esc(val || '—') + '</span>') + '</td>';
+        if (k === 'market') { var mv = mkt(val); return '<td>' + (MKT[mv] ? esc(mv)
+          : '<span style="color:var(--red)">' + esc(mv || '—') + '</span>') + '</td>'; }
         if (k === 'description') return '<td style="font-size:11px;color:var(--dim);max-width:340px">' +
           esc(val || '—') + '</td>';
         if (k === 'id') return '<td style="font-family:var(--mono);font-size:11px">' + esc(val || '—') + '</td>';
         if (h[2]) return '<td class="num">' + (typeof val === 'number' ? fmt(val, k === 'mw' ? 1 : 4) : '—') + '</td>';
         return '<td>' + esc(val == null || val === '' ? '—' : val) + '</td>';
       }).join('') + '</tr>';
-    }).join('') || '<tr><td colspan="' + V.head.length + '" style="color:var(--dim)">Sin resultados.</td></tr>';
+    }).join('') || '<tr><td colspan="' + V.head.length + '" style="color:var(--dim)">No results.</td></tr>';
 
     sec.querySelectorAll('#azTable th').forEach(function (th) {
       th.addEventListener('click', function () {
@@ -520,33 +554,33 @@
   function renderCross() {
     var by = {};
     REG.rows.forEach(function (r) {
-      var m = r[RI.market]; if (!m) return;
+      var m = mkt(r[RI.market]); if (!m) return;
       var o = by[m] || (by[m] = { m: m, reg: 0, ann: 0, ppa: 0, ppamw: 0, pops: 0 });
       o.reg++; if (!r[RI.is_open]) o.ann++;
     });
     PPA.rows.forEach(function (r) {
-      var o = by[r[PI.market]]; if (!o) return;
+      var o = by[mkt(r[PI.market])]; if (!o) return;
       o.ppa++; o.ppamw += (r[PI.mw] || 0);
     });
-    POP.rows.forEach(function (r) { var o = by[r[OI.market]]; if (o) o.pops++; });
+    POP.rows.forEach(function (r) { var o = by[mkt(r[OI.market])]; if (o) o.pops++; });
 
     var list = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) {
       return ((MKT[b.m] ? MKT[b.m].fut : 0) - (MKT[a.m] ? MKT[a.m].fut : 0));
     });
     el('azCross').innerHTML =
-      '<h3>Estadisticas por pais — presencia de Microsoft Azure vs tamano del mercado</h3>' +
+      '<h3>Country statistics — Microsoft Azure presence vs market size</h3>' +
       '<p style="font-size:11.5px;color:var(--dim);margin-bottom:10px">' +
-      'Columnas 2-6: <b>solo Microsoft Azure</b>. Columnas 7-9: <b>todo el pais y todos los operadores</b> ' +
-      '(BNEF/DCByte), no Microsoft. Los MW de PPA son <b>generacion</b>; los de BNEF son <b>IT load</b>. ' +
-      'Tres magnitudes distintas: no sumar entre columnas.</p>' +
+      'Columns 2-6: <b>Microsoft Azure only</b>. Columns 7-9: <b>the whole country and all operators</b> ' +
+      '(BNEF/DCByte), not Microsoft. PPA MW are <b>generation</b>; BNEF MW are <b>IT load</b>. ' +
+      'Three different quantities: do not add across columns.</p>' +
       '<div style="overflow-x:auto"><table><thead><tr><th>Market</th>' +
-      '<th class="num">Azure regions</th><th class="num">Anunciadas</th><th class="num">Azure PoPs</th>' +
+      '<th class="num">Azure regions</th><th class="num">Announced</th><th class="num">Azure PoPs</th>' +
       '<th class="num">Azure PPAs</th><th class="num">MW gen. (PPA)</th>' +
-      '<th class="num">BNEF DCs</th><th class="num">Live MW (pais)</th><th class="num">Future MW (pais)</th>' +
+      '<th class="num">BNEF DCs</th><th class="num">Live MW (country)</th><th class="num">Future MW (country)</th>' +
       '</tr></thead><tbody>' + list.map(function (o) {
         var b = MKT[o.m];
         return '<tr><td>' + (b ? esc(o.m) : '<span style="color:var(--red)">' + esc(o.m) +
-            ' (sin match)</span>') + '</td>' +
+            ' (no match)</span>') + '</td>' +
           '<td class="num">' + o.reg + '</td><td class="num">' + (o.ann || '—') + '</td>' +
           '<td class="num">' + (o.pops || '—') + '</td><td class="num">' + (o.ppa || '—') + '</td>' +
           '<td class="num" style="color:#1e7a3c">' + (o.ppamw ? fmt(o.ppamw, 0) : '—') + '</td>' +
@@ -579,14 +613,9 @@
   sec.querySelectorAll('.toolbar button[data-v]').forEach(function (b) {
     b.addEventListener('click', function () { setView(b.dataset.v); });
   });
-  sec.querySelectorAll('.toolbar button[data-m]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      mapView = b.dataset.m;
-      sec.querySelectorAll('.toolbar button[data-m]').forEach(function (o) {
-        o.classList.toggle('primary', o.dataset.m === mapView);
-      });
-      drawMap();
-    });
+  el('azMapView').addEventListener('change', function () {
+    mapView = this.value;
+    drawMap();
   });
 
   /* ---------- export CSV de la vista activa ---------- */
@@ -649,6 +678,6 @@
     }, 1000);
   };
 
-  console.info('[azure_layer] Microsoft Azure OK · ' + REG.rows.length + ' regiones · ' +
-    PPA.rows.length + ' PPAs · ' + POP.rows.length + ' PoPs · capturado ' + (A.meta.captured || '?'));
+  console.info('[azure_layer] Microsoft Azure OK · ' + REG.rows.length + ' regions · ' +
+    PPA.rows.length + ' PPAs · ' + POP.rows.length + ' PoPs · captured ' + (A.meta.captured || '?'));
 })();
