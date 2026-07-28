@@ -37,7 +37,7 @@
 
   if (typeof window.__DATA === 'undefined') return;
   if (typeof window.__CLOUD === 'undefined') {
-    console.info('[cloud_layer] window.__CLOUD no encontrado — pestana Cloud regions desactivada.');
+    console.info('[cloud_layer] window.__CLOUD not found - Cloud regions tab disabled.');
     return;
   }
 
@@ -91,6 +91,51 @@
     return out;
   })();
 
+  /* ---------- clase de region ------------------------------------------------
+     Cuatro valores: commercial / government / sovereign / dedicated.
+
+     Oracle: se deriva del realm que viene en `extra` (realm=ocNN). Mapeo
+     verificado contra la documentacion de Oracle (docs.oracle.com, "Resource
+     Identifiers": oc1 comercial, oc2 Government Cloud, oc3 Federal Government
+     Cloud) y contra Region.java del oci-java-sdk, que asigna region a realm una
+     por una y da el dominio de cada realm:
+       oc1  oraclecloud.com      -> comercial
+       oc2  oraclegovcloud.com   -> gobierno (US)
+       oc3  oraclegovcloud.com   -> gobierno (US federal)
+       oc4  oraclegovcloud.uk    -> gobierno (UK)
+       oc19 oraclecloud.eu       -> soberana (EU Sovereign Cloud)
+     El resto de realms (oc8, oc9, oc10, oc14, oc15, oc20, oc21, oc23, oc24,
+     oc26, oc29, oc35, oc42, oc51, oc52) tienen dominio propio y aislado, y
+     Oracle NO publica en el SDK para que sirve cada uno. Se etiquetan como
+     'dedicated' por su estructura de realm aislado, sin afirmar quien los opera.
+
+     Azure: las cinco regiones de China traen en `extra` el texto de
+     data_residency del propio Microsoft, que las describe como oferta soberana
+     con red independiente y dedicada. El resto no trae ningun campo de clase.
+
+     AWS y Google: la captura solo contiene regiones de la particion estandar,
+     luego todas son comerciales. OJO: no hay ni una sola region gov o soberana
+     de AWS, Azure o Google en el dataset (faltan GovCloud, AWS China, Azure
+     Government). Los recuentos de gobierno/soberana son un suelo, no un total.
+     Ese aviso se pinta bajo el mapa; no lo quites sin sustituirlo. */
+  var OCI_REALM = { oc1: 'commercial', oc2: 'government', oc3: 'government',
+                    oc4: 'government', oc19: 'sovereign' };
+
+  function regionClass(r) {
+    var ex = String(r[I.extra] || '');
+    if (r[I.csp] === 'Oracle') {
+      var m = /realm=(\w+)/.exec(ex);
+      var k = m && OCI_REALM[m[1]];
+      return k || 'dedicated';
+    }
+    if (/sovereign/i.test(ex)) return 'sovereign';
+    return 'commercial';
+  }
+
+  var CLASS_LABEL = { commercial: 'Commercial', government: 'Government',
+                      sovereign: 'Sovereign', dedicated: 'Dedicated' };
+  var CLASS_KEYS = ['commercial', 'government', 'sovereign', 'dedicated'];
+
   /* Devuelve donde y con que precision se pinta una region. */
   function placement(r) {
     if (r[I.lat] != null) return { lat: r[I.lat], lon: r[I.lon], kind: r[I.coord_src] };
@@ -126,19 +171,18 @@
   sec.innerHTML =
     '<div class="kpis" id="clKpis"></div>' +
     '<div class="filters">' +
-      '<div><label>Operador</label><select id="clCsp"><option value="">All</option>' +
+      '<div><label>Operator</label><select id="clCsp"><option value="">All</option>' +
         CSPS.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
       '<div><label>Market</label><select id="clMkt"><option value="">All</option>' +
         MKTS.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
-      '<div><label>Coordenada</label><select id="clGeo"><option value="">All</option>' +
-        '<option value="operator">Publicada por el operador</option>' +
-        '<option value="gazetteer">Centroide de ciudad (derivada)</option>' +
-        '<option value="country">Solo centro de pais (ciudad no publicada)</option>' +
-        '<option value="none">No situable</option></select></div>' +
-      '<div><label>Buscar</label><input type="text" id="clQ" placeholder="madrid, eu-south, spain…"></div>' +
+      '<div><label>Class</label><select id="clClass"><option value="">All</option>' +
+        CLASS_KEYS.map(function (k) {
+          return '<option value="' + k + '">' + CLASS_LABEL[k] + '</option>';
+        }).join('') + '</select></div>' +
+      '<div><label>Search</label><input type="text" id="clQ" placeholder="madrid, eu-south, spain…"></div>' +
     '</div>' +
     '<div class="panel" style="margin-bottom:14px">' +
-      '<h3 id="clMapTitle">Regiones cloud por operador</h3>' +
+      '<h3 id="clMapTitle">Cloud regions by operator</h3>' +
       '<canvas id="clCanvas" width="1000" height="500" style="display:block;width:100%;background:#f0ece7;' +
         'border:1px solid var(--line);border-radius:4px"></canvas>' +
       '<div id="clTip" style="display:none;position:fixed;z-index:60;background:#fff;border:1px solid var(--line);' +
@@ -146,19 +190,25 @@
         'box-shadow:0 2px 8px rgba(20,40,60,.18);pointer-events:none;max-width:280px"></div>' +
       '<div id="clLegend" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px;' +
         'font-family:var(--mono);font-size:11px;color:var(--dim)"></div>' +
+      '<p style="font-size:11.5px;color:var(--dim);margin:10px 0 0">Region class is derived from each ' +
+        'operator&rsquo;s own metadata: Oracle from its realm (oc1 commercial; oc2, oc3 and oc4 government; ' +
+        'oc19 EU Sovereign Cloud; every other realm is an isolated realm, shown as dedicated), Azure from ' +
+        'its published data-residency statement. <b>The capture contains no government or sovereign region ' +
+        'for AWS, Azure or Google</b> — AWS GovCloud, AWS China and Azure Government are absent from the ' +
+        'source. Treat the government and sovereign counts as a floor, not a total.</p>' +
     '</div>' +
     '<div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:14px">' +
-      '<div class="panel"><h3>Regiones por operador</h3><div style="height:230px"><canvas id="clC1"></canvas></div></div>' +
-      '<div class="panel"><h3>Top 12 mercados por nº de regiones cloud</h3><div style="height:230px"><canvas id="clC2"></canvas></div></div>' +
+      '<div class="panel"><h3>Region class by operator</h3><div style="height:230px"><canvas id="clC1"></canvas></div></div>' +
+      '<div class="panel"><h3>Top 12 markets by number of cloud regions</h3><div style="height:230px"><canvas id="clC2"></canvas></div></div>' +
     '</div>' +
     '<div class="panel" style="margin-bottom:14px">' +
       '<h3 style="display:flex;justify-content:space-between;align-items:center">' +
         '<span id="clTitle"></span><button class="btn" id="clCsv">Export CSV</button></h3>' +
       '<div style="overflow-x:auto"><table id="clTable"><thead><tr>' +
-        '<th data-k="csp">Operador</th><th data-k="region_id">Region id</th><th data-k="display">Nombre</th>' +
-        '<th data-k="city">Ciudad</th><th data-k="market">Market (BNEF)</th><th data-k="geo_area">Area</th>' +
-        '<th data-k="status">Estado</th><th data-k="year_open">Año</th>' +
-        '<th data-k="coord_src">Coordenada</th>' +
+        '<th data-k="csp">Operator</th><th data-k="region_id">Region id</th><th data-k="display">Name</th>' +
+        '<th data-k="city">City</th><th data-k="market">Market (BNEF)</th><th data-k="geo_area">Area</th>' +
+        '<th data-k="status">Status</th><th data-k="year_open">Year</th>' +
+        '<th data-k="_class">Class</th>' +
         '<th class="num" data-k="cfe">CFE %</th><th class="num" data-k="grid_co2">gCO2/kWh</th>' +
         '<th data-k="extra">Extra</th>' +
       '</tr></thead><tbody></tbody></table></div>' +
@@ -169,12 +219,12 @@
   var sortK = null, sortDir = 1, charts = {}, pts = [];
 
   function rowsOf() {
-    var c = el('clCsp').value, m = el('clMkt').value, g = el('clGeo').value;
+    var c = el('clCsp').value, m = el('clMkt').value, cl = el('clClass').value;
     var q = el('clQ').value.trim().toLowerCase();
     return R.rows.filter(function (r) {
       if (c && r[I.csp] !== c) return false;
       if (m && r[I.market] !== m) return false;
-      if (g && placement(r).kind !== g) return false;
+      if (cl && regionClass(r) !== cl) return false;
       if (q && [r[I.csp], r[I.region_id], r[I.display], r[I.city], r[I.market]]
         .join(' ').toLowerCase().indexOf(q) < 0) return false;
       return true;
@@ -227,44 +277,47 @@
       p[0] += Math.cos(ang) * rad; p[1] += Math.sin(ang) * rad;
       var col = CSP_COLOR[r[I.csp]] || DIM;
 
-      if (pl.kind === 'country') {
-        /* ROMBO HUECO: deliberadamente distinto de un punto. No dice "esta aqui",
-           dice "esta en este pais y el operador no publica donde". */
-        var d = 6;
-        ctx.beginPath();
-        ctx.moveTo(p[0], p[1] - d); ctx.lineTo(p[0] + d, p[1]);
-        ctx.lineTo(p[0], p[1] + d); ctx.lineTo(p[0] - d, p[1]);
+      var cls = regionClass(r), approx = pl.kind === 'country', d = 5.5;
+      ctx.beginPath();
+      if (cls === 'government') {            /* cuadrado */
+        ctx.rect(p[0] - d, p[1] - d, d * 2, d * 2);
+      } else if (cls === 'sovereign') {      /* triangulo */
+        ctx.moveTo(p[0], p[1] - d - 1);
+        ctx.lineTo(p[0] + d + 1, p[1] + d);
+        ctx.lineTo(p[0] - d - 1, p[1] + d);
         ctx.closePath();
+      } else if (cls === 'dedicated') {      /* rombo */
+        ctx.moveTo(p[0], p[1] - d - 1); ctx.lineTo(p[0] + d + 1, p[1]);
+        ctx.lineTo(p[0], p[1] + d + 1); ctx.lineTo(p[0] - d - 1, p[1]);
+        ctx.closePath();
+      } else {                               /* circulo */
+        ctx.arc(p[0], p[1], d, 0, 6.2832);
+      }
+      if (approx) {
+        /* hueco y discontinuo: el operador no publica la ciudad, el marcador
+           esta en el centro del pais y no es una ubicacion real */
         ctx.fillStyle = col + '26'; ctx.fill();
         ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.setLineDash([3, 2]);
         ctx.stroke(); ctx.setLineDash([]);
       } else {
-        var derived = pl.kind === 'gazetteer';
-        ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 6.2832);
-        ctx.fillStyle = derived ? col + '80' : col; ctx.fill();
-        ctx.strokeStyle = derived ? col : '#fff';
-        ctx.lineWidth = derived ? 1 : 1.3;
-        if (derived) ctx.setLineDash([2, 2]);
-        ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = col; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3; ctx.stroke();
       }
-      var PREC = { operator: 'coord publicada por el operador',
-                   gazetteer: 'centroide de la ciudad declarada (no es un edificio)',
-                   country: 'CIUDAD NO PUBLICADA · marcador en el centro del pais' };
       pts.push({ x: p[0], y: p[1], r: 9,
         t: r[I.csp] + ' · ' + r[I.region_id] + '\n' + (r[I.display] || '') +
-           '\n' + (r[I.city] || 'ciudad no publicada') + ' · ' + (r[I.market] || '—') +
-           '\n' + PREC[pl.kind] });
+           '\n' + (r[I.city] || 'city not published') + ' · ' + (r[I.market] || '—') +
+           '\n' + CLASS_LABEL[cls] + (approx ? '\napproximate position' : '') });
     });
     el('clLegend').innerHTML = CSPS.map(function (c) {
       return '<span><b style="color:' + (CSP_COLOR[c] || DIM) + '">●</b> ' + esc(c) + '</span>';
     }).join('') +
       '<span style="margin-left:8px;border-left:1px solid var(--line);padding-left:12px">' +
-      '<b>●</b> coord del operador · <b>◌</b> centroide de ciudad · <b>◇</b> centro del pais ' +
-      '(<b>' + nCountry + '</b>: el operador no publica la ciudad)</span>' +
+      '<b>●</b> commercial · <b>■</b> government · <b>▲</b> sovereign · <b>◆</b> dedicated</span>' +
+      '<span>hollow outline = approximate position, city not published (<b>' + nCountry + '</b>)</span>' +
       (hidden ? '<span style="color:var(--red)"><b>' + hidden +
-        ' sin pais identificable, NO representadas</b></span>' : '');
-    el('clMapTitle').textContent = 'Regiones cloud por operador · ' + (rows.length - hidden) +
-      ' en el mapa de ' + rows.length + (hidden ? ' · ' + hidden + ' no situables' : '');
+        ' with no identifiable country, NOT plotted</b></span>' : '');
+    el('clMapTitle').textContent = 'Cloud regions by operator · ' + (rows.length - hidden) +
+      ' of ' + rows.length + ' on the map' + (hidden ? ' · ' + hidden + ' not locatable' : '');
   }
 
   (function () {
@@ -300,23 +353,22 @@
     var rows = rowsOf();
     var byC = {};
     rows.forEach(function (r) {
-      var o = byC[r[I.csp]] || (byC[r[I.csp]] = { geo: 0, ct: 0, no: 0 });
-      var k = placement(r).kind;
-      if (k === 'none') o.no++; else if (k === 'country') o.ct++; else o.geo++;
+      var o = byC[r[I.csp]] || (byC[r[I.csp]] = { commercial: 0, government: 0, sovereign: 0, dedicated: 0 });
+      o[regionClass(r)]++;
     });
-    var ks = Object.keys(byC).sort(function (a, b) {
-      return (byC[b].geo + byC[b].ct + byC[b].no) - (byC[a].geo + byC[a].ct + byC[a].no);
-    });
+    var tot = function (k) {
+      return byC[k].commercial + byC[k].government + byC[k].sovereign + byC[k].dedicated;
+    };
+    var ks = Object.keys(byC).sort(function (a, b) { return tot(b) - tot(a); });
+    var CLASS_FILL = { commercial: '#cfc7bd', government: '#c0392b',
+                       sovereign: '#c85a12', dedicated: '#0e7c86' };
     mkChart('clC1', {
       type: 'bar',
-      data: { labels: ks, datasets: [
-        { label: 'Ubicacion (operador o ciudad)', data: ks.map(function (k) { return byC[k].geo; }),
-          backgroundColor: ks.map(function (k) { return CSP_COLOR[k] || DIM; }) },
-        { label: 'Solo pais', data: ks.map(function (k) { return byC[k].ct; }),
-          backgroundColor: '#e0b48a' },
-        { label: 'No situable', data: ks.map(function (k) { return byC[k].no; }),
-          backgroundColor: '#cfc7bd' }
-      ] },
+      data: { labels: ks, datasets: CLASS_KEYS.map(function (ck) {
+        return { label: CLASS_LABEL[ck],
+                 data: ks.map(function (k) { return byC[k][ck]; }),
+                 backgroundColor: CLASS_FILL[ck] };
+      }) },
       options: { plugins: { legend: { display: true, position: 'bottom' } },
         scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
     });
@@ -334,7 +386,7 @@
         backgroundColor: mk.map(function (k) { return MKT[k] ? '#ee6f2c' : DIM; }) }] },
       options: { indexAxis: 'y', plugins: { legend: { display: false },
         tooltip: { callbacks: { afterLabel: function (c) {
-          return Object.keys(byM[c.label].csps).length + ' operador(es)';
+          return Object.keys(byM[c.label].csps).length + ' operator(s)';
         } } } }, scales: { x: { beginAtZero: true } } }
     });
   }
@@ -342,37 +394,38 @@
   /* ---------- tabla ---------- */
   function renderTable() {
     var base = rowsOf();
-    el('clTitle').textContent = 'Regiones cloud · ' + base.length + ' de ' + R.rows.length;
+    el('clTitle').textContent = 'Cloud regions · ' + base.length + ' of ' + R.rows.length;
     var rows = base.slice();
     if (sortK) {
       rows.sort(function (a, b) {
-        var x = a[I[sortK]], y = b[I[sortK]];
+        var x = sortK === '_class' ? CLASS_LABEL[regionClass(a)] : a[I[sortK]];
+        var y = sortK === '_class' ? CLASS_LABEL[regionClass(b)] : b[I[sortK]];
         if (x == null) x = ''; if (y == null) y = '';
         if (typeof x === 'number' && typeof y === 'number') return (x - y) * sortDir;
         return String(x).localeCompare(String(y)) * sortDir;
       });
     }
     sec.querySelector('#clTable tbody').innerHTML = rows.map(function (r) {
-      var cs = r[I.coord_src], pk = placement(r).kind;
       return '<tr>' +
         '<td><span class="tag" style="color:' + (CSP_COLOR[r[I.csp]] || DIM) +
           ';border-color:var(--line)">' + esc(r[I.csp]) + '</span></td>' +
         '<td style="font-family:var(--mono);font-size:11px">' + esc(r[I.region_id]) + '</td>' +
         '<td>' + esc(r[I.display] || '—') + '</td>' +
         '<td>' + (r[I.city] ? esc(r[I.city])
-          : '<span style="color:var(--dim)">no publicada</span>') + '</td>' +
+          : '<span style="color:var(--dim)">not published</span>') + '</td>' +
         '<td>' + (r[I.market] ? (MKT[r[I.market]] ? esc(r[I.market])
           : '<span style="color:var(--red)">' + esc(r[I.market]) + '</span>') : '—') + '</td>' +
         '<td>' + esc(r[I.geo_area] || '—') + '</td>' +
         '<td>' + (r[I.status] === 'announced'
-          ? '<span class="tag" style="color:#c85a12;border-color:#ecd9ae">anunciada</span>'
+          ? '<span class="tag" style="color:#c85a12;border-color:#ecd9ae">announced</span>'
           : '<span class="tag amer">live</span>') + '</td>' +
         '<td>' + esc(r[I.year_open] || '—') + '</td>' +
-        '<td style="font-size:11px">' + (cs === 'operator'
-          ? '<b style="color:#1e7a3c">operador</b>'
-          : cs === 'gazetteer' ? '<span style="color:var(--dim)">centroide ciudad</span>'
-          : pk === 'country' ? '<span style="color:#c85a12">centro de pais</span>'
-          : '<span style="color:var(--red)">no situable</span>') + '</td>' +
+        '<td style="font-size:11px">' + (function () {
+          var k = regionClass(r);
+          var col = k === 'government' ? '#c0392b' : k === 'sovereign' ? '#c85a12'
+                  : k === 'dedicated' ? '#0e7c86' : 'var(--dim)';
+          return '<span style="color:' + col + '">' + CLASS_LABEL[k] + '</span>';
+        })() + '</td>' +
         '<td class="num">' + (r[I.cfe] == null ? '<span style="color:var(--dim)">—</span>'
           : '<b style="color:' + (r[I.cfe] >= 0.8 ? '#1e7a3c' : r[I.cfe] >= 0.5 ? '#c85a12' : '#c0392b') +
             '">' + Math.round(r[I.cfe] * 100) + '%</b>') + '</td>' +
@@ -380,7 +433,7 @@
           : fmt(r[I.grid_co2], 0)) + '</td>' +
         '<td style="font-size:11px;color:var(--dim)">' + esc(r[I.extra] || '—') + '</td>' +
       '</tr>';
-    }).join('') || '<tr><td colspan="12" style="color:var(--dim)">Sin resultados.</td></tr>';
+    }).join('') || '<tr><td colspan="12" style="color:var(--dim)">No results.</td></tr>';
 
     sec.querySelectorAll('#clTable th').forEach(function (th) {
       th.addEventListener('click', function () {
@@ -404,19 +457,19 @@
              (b.n - a.n);
     });
     el('clCross').innerHTML =
-      '<h3>Estadisticas por pais — operadores cloud presentes vs tamano del mercado</h3>' +
-      '<p style="font-size:11.5px;color:var(--dim);margin-bottom:10px">Columnas de operador: ' +
-      'nº de regiones que <b>cada operador declara</b> en ese pais. Columnas BNEF: ' +
-      '<b>todo el pais, todos los operadores</b>, incluidos colocation y enterprise. ' +
-      'Una region cloud no equivale a un edificio ni a unos MW: no son comparables entre si.</p>' +
+      '<h3>Country statistics — cloud operators present vs market size</h3>' +
+      '<p style="font-size:11.5px;color:var(--dim);margin-bottom:10px">Operator columns: ' +
+      'number of regions <b>each operator declares</b> in that country. BNEF columns: ' +
+      '<b>the whole country, all operators</b>, including colocation and enterprise. ' +
+      'A cloud region is not equivalent to a building or to a given number of MW: they are not comparable.</p>' +
       '<div style="overflow-x:auto"><table><thead><tr><th>Market</th>' +
       CSPS.map(function (c) { return '<th class="num">' + esc(c) + '</th>'; }).join('') +
-      '<th class="num">Total regiones</th><th class="num">Operadores</th>' +
+      '<th class="num">Total regions</th><th class="num">Operators</th>' +
       '<th class="num">BNEF DCs</th><th class="num">Live MW</th><th class="num">Future MW</th>' +
       '</tr></thead><tbody>' + list.map(function (o) {
         var b = MKT[o.m];
         return '<tr><td>' + (b ? esc(o.m) : '<span style="color:var(--red)">' + esc(o.m) +
-            ' (sin match)</span>') + '</td>' +
+            ' (no match)</span>') + '</td>' +
           CSPS.map(function (c) {
             return '<td class="num">' + (o.csps[c] || '—') + '</td>';
           }).join('') +
@@ -431,19 +484,19 @@
   function render() {
     var rows = rowsOf();
     el('clKpis').innerHTML = [
-      [rows.length, 'Regiones cloud'],
-      [new Set(rows.map(function (r) { return r[I.csp]; })).size, 'Operadores'],
-      [new Set(rows.map(function (r) { return r[I.market]; }).filter(Boolean)).size, 'Mercados'],
-      [rows.filter(function (r) { return placement(r).kind === 'operator'; }).length, 'Coord. del operador'],
-      [rows.filter(function (r) { return placement(r).kind === 'country'; }).length, 'Solo centro de pais'],
-      [rows.filter(function (r) { return r[I.status] === 'announced'; }).length, 'Anunciadas (solo Azure)']
+      [rows.length, 'Cloud regions'],
+      [new Set(rows.map(function (r) { return r[I.csp]; })).size, 'Operators'],
+      [new Set(rows.map(function (r) { return r[I.market]; }).filter(Boolean)).size, 'Markets'],
+      [rows.filter(function (r) { return regionClass(r) === 'government'; }).length, 'Government'],
+      [rows.filter(function (r) { return regionClass(r) === 'sovereign'; }).length, 'Sovereign'],
+      [rows.filter(function (r) { return regionClass(r) === 'dedicated'; }).length, 'Dedicated']
     ].map(function (k) {
       return '<div class="kpi"><div class="v">' + k[0] + '</div><div class="l">' + k[1] + '</div></div>';
     }).join('');
     renderTable(); drawMap(); drawCharts(); renderCross();
   }
 
-  ['clCsp', 'clMkt', 'clGeo'].forEach(function (id) { el(id).addEventListener('change', render); });
+  ['clCsp', 'clMkt', 'clClass'].forEach(function (id) { el(id).addEventListener('change', render); });
   el('clQ').addEventListener('input', render);
 
   el('clCsv').addEventListener('click', function () {
@@ -502,7 +555,7 @@
     }, 1000);
   };
 
-  console.info('[cloud_layer] OK · ' + R.rows.length + ' regiones · ' + CSPS.length +
-    ' operadores (' + CSPS.join(', ') + ') · ' + Object.keys(CENTROID).length +
-    ' centroides de pais calculados · construido ' + K.meta.built);
+  console.info('[cloud_layer] OK · ' + R.rows.length + ' regions · ' + CSPS.length +
+    ' operators (' + CSPS.join(', ') + ') · ' + Object.keys(CENTROID).length +
+    ' country centroids computed · built ' + K.meta.built);
 })();
