@@ -87,16 +87,6 @@
   var FYS = Array.from(new Set(PPA.rows.map(function (r) { return r[PI.fy]; }).filter(Boolean))).sort();
 
   sec.innerHTML =
-    '<div class="panel" style="border-left:4px solid var(--accent);margin-bottom:14px">' +
-      '<p style="font-size:12.5px;color:var(--dim);line-height:1.6">' +
-      'Toda esta pestana es <b>Microsoft Azure</b> y solo Microsoft Azure. No contiene otros operadores. ' +
-      '<b>Fuente primaria:</b> endpoints REST del globo de Microsoft ' +
-      '(<code>datacenters.microsoft.com/wp-json/globe/*</code>). No es prensa. ' +
-      '<b>Capturado:</b> ' + esc(A.meta.captured || '—') + '. <b>Dato confirmado</b>, no estimacion.<br>' +
-      (A.meta.caveats || []).map(function (c) { return '· ' + esc(c); }).join('<br>') +
-      (NOMATCH.length ? '<br><b style="color:var(--red)">Markets sin equivalente en BNEF (' +
-        NOMATCH.length + '):</b> ' + esc(NOMATCH.join(', ')) : '') +
-      '</p></div>' +
     '<div class="toolbar"><div class="tb-group"><span class="tb-label">Vista Azure</span>' +
       '<button class="btn primary" data-v="reg">Regions</button>' +
       '<button class="btn" data-v="ppa">Renewable PPAs</button>' +

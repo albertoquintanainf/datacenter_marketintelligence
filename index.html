@@ -692,7 +692,7 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
 
 <footer>
-  <strong>Source & disclaimer.</strong> Data: <strong>BloombergNEF — “Data center projects database”</strong> (sources: BloombergNEF and DC Byte). The latest quarter in the series may be <strong>provisional</strong>. «Live capacity» refers to operational IT capacity, lower than total contracted power. This dashboard is an internal reference tool: figures must be verified against the primary source before use in external documents, and nothing shown here constitutes investment advice. Qualitative profile fields (energy strategy, partners, committed investment) are not in the database and require complementary analysis. «Europe», «Middle East» and «Africa» are curated market groupings defined in this dashboard (Europe = geographic Europe incl. UK, EFTA, Balkans and Ukraine; excl. Russia, Turkey and the Caucasus), since the database only distinguishes AMER / EMEA / APAC.
+  <strong>Source &amp; disclaimer.</strong> Quantitative core: <strong>BloombergNEF — &ldquo;Data center projects database&rdquo;</strong> (sources: BloombergNEF and DC Byte), snapshot <span id="discSnapshot">—</span>; the latest quarter in the series may be provisional. The <em>Azure</em> tab is built solely from Microsoft&rsquo;s own globe REST endpoints (<code>datacenters.microsoft.com/wp-json/globe/*</code>). The <em>Cloud regions</em> tab is built solely from each operator&rsquo;s own primary sources. The <em>announced investments</em> layer is manually curated from company announcements and is <strong>not</strong> BNEF-verified. User-added records are flagged as such and carry their own source. Internal reference tool: verify every figure against its primary source before external use. Nothing here is investment advice. Redistribution of BloombergNEF data prohibited without their consent.
 </footer>
 
 <script src="data.js"></script>
@@ -710,6 +710,8 @@ const LABELS = window.__LABELS || {};
 const C = {}; DATA.cols.forEach((c,i)=>C[c]=i);
 const R = DATA.rows;
 document.getElementById('metaBadge').textContent = DATA.meta.dataset+' · '+DATA.meta.date+' · '+DATA.meta.n+' data centers';
+/* El disclaimer del pie declara la fecha real del snapshot, no una constante escrita a mano. */
+(function(){ const s=document.getElementById('discSnapshot'); if(s) s.textContent = DATA.meta.date; })();
 
 const fmt = (v,d=1)=> v==null?'—':v.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:0});
 const sizeBucket = h => h==null?null : h<5?'a':h<20?'b':h<50?'c':h<100?'d':'e';

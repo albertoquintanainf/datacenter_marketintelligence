@@ -124,16 +124,6 @@
   var nogeo = R.rows.filter(function (r) { return r[I.lat] == null; }).length;
 
   sec.innerHTML =
-    '<div class="panel" style="border-left:4px solid var(--accent);margin-bottom:14px">' +
-      '<p style="font-size:12.5px;color:var(--dim);line-height:1.6">' +
-      '<b>Operadores:</b> ' + esc(CSPS.join(', ')) + '. <b>Construido:</b> ' + esc(K.meta.built) + '.<br>' +
-      Object.keys(K.meta.sources || {}).map(function (k) {
-        return '· <b>' + esc(k) + ':</b> ' + esc(K.meta.sources[k]);
-      }).join('<br>') + '<br>' +
-      (K.meta.caveats || []).map(function (c) { return '· ' + esc(c); }).join('<br>') +
-      ((K.meta.missing || []).length ? '<br><b style="color:var(--red)">Sin datos (requiere credenciales o captura HTML):</b> ' +
-        esc(K.meta.missing.join(' · ')) : '') +
-      '</p></div>' +
     '<div class="kpis" id="clKpis"></div>' +
     '<div class="filters">' +
       '<div><label>Operador</label><select id="clCsp"><option value="">All</option>' +
