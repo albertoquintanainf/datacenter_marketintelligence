@@ -88,7 +88,6 @@
 
   sec.innerHTML =
     '<div class="panel" style="border-left:4px solid var(--accent);margin-bottom:14px">' +
-      '<h3>Microsoft Azure — huella global declarada por el operador</h3>' +
       '<p style="font-size:12.5px;color:var(--dim);line-height:1.6">' +
       'Toda esta pestana es <b>Microsoft Azure</b> y solo Microsoft Azure. No contiene otros operadores. ' +
       '<b>Fuente primaria:</b> endpoints REST del globo de Microsoft ' +

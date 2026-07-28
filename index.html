@@ -847,6 +847,15 @@ window.printSheet = function(){
 
 function uniq(col){ const s=new Set(); R.forEach(r=>{const v=r[C[col]]; if(v)s.add(v);}); return [...s].sort(); }
 uniq('region').forEach(v=>els('fRegion').append(new Option(v,v)));
+/* Agrupación curada: «Europe» no existe como región en BNEF (solo AMER/EMEA/APAC),
+   así que se resuelve por país contra GEOS['Europe'] (ver definición más abajo). */
+(function(){
+  const sel=els('fRegion'); if(!sel) return;
+  const og=document.createElement('optgroup');
+  og.label='Curated grouping';
+  og.append(new Option('Europe only','G:Europe'));
+  sel.append(og);
+})();
 uniq('market').forEach(v=>els('fMarket').append(new Option(v,v)));
 // Rellena un <select> con subcategorías agrupadas bajo su categoría (Colocation / Self-build).
 // La subcategoría implica la categoría, así que un solo menú jerárquico basta.
@@ -894,6 +903,43 @@ window.resetStatFilters=()=>{['sRegion','sMarket','sSubcat'].forEach(id=>els(id)
 uniq('status').forEach(v=>els('fStatus').append(new Option(v,v)));
 uniq('company').forEach(v=>els('companyList').append(new Option(v)));
 
+/* ---------------------------------------------------------------------------
+ * matchCompany(companyName, query)
+ * Coincidencia por INICIO DE PALABRA, no por subcadena libre.
+ * Motivo: `"rheinmetall".includes("meta")` es true, por lo que filtrar por
+ * "Meta" arrastraba Rheinmetall (Unterlüß, Alemania) al resultado.
+ * El inicio de palabra conserva el tecleo progresivo ("equi" -> Equinix)
+ * y elimina los falsos positivos internos ("aws" -> Pawsey Centre).
+ * Verificado sin regresiones sobre las 2.212 empresas del dataset.
+ * ------------------------------------------------------------------------- */
+const _CO_SEP = '(?:^|[^0-9a-z\\u00e0-\\u00f6\\u00f8-\\u00ff])';
+const _coRxCache = new Map();
+function matchCompany(name, q){
+  if(!q) return true;
+  if(!name) return false;
+  let rx = _coRxCache.get(q);
+  if(!rx){
+    rx = new RegExp(_CO_SEP + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+    _coRxCache.set(q, rx);
+  }
+  return rx.test(String(name).toLowerCase());
+}
+
+/* ---------------------------------------------------------------------------
+ * regionMatches(sel, region, market)
+ * `sel` es el valor de #fRegion. Puede ser una región BNEF (AMER/EMEA/APAC)
+ * o una agrupación curada con prefijo "G:" (p. ej. "G:Europe"), que se resuelve
+ * por país contra GEOS porque la base solo distingue los tres continentes.
+ * ------------------------------------------------------------------------- */
+function regionMatches(sel, region, market){
+  if(!sel) return true;
+  if(sel.slice(0,2)==='G:'){
+    const g = (typeof GEOS!=='undefined') ? GEOS[sel.slice(2)] : null;
+    return !!(g && g.has(market));
+  }
+  return region===sel;
+}
+
 let filtered = R.slice(), page=0, sortCol='live', sortDir=-1;
 const PAGE=25;
 
@@ -901,8 +947,8 @@ function applyFilters(){
   const co=els('fCompany').value.trim().toLowerCase(), re=els('fRegion').value, ma=els('fMarket').value,
         si=els('fSize').value, sc=els('fSubcat').value, st=els('fStatus').value, na=els('fName').value.trim().toLowerCase();
   filtered = R.filter(r=>{
-    if(co && !(r[C.company]||'').toLowerCase().includes(co)) return false;
-    if(re && r[C.region]!==re) return false;
+    if(co && !matchCompany(r[C.company], co)) return false;
+    if(re && !regionMatches(re, r[C.region], r[C.market])) return false;
     if(ma && r[C.market]!==ma) return false;
     if(si && sizeBucket(r[C.headline])!==si) return false;
         if(sc && r[C.subcategory]!==sc) return false;
@@ -974,8 +1020,8 @@ function renderSearchAnn(){
   const ma=els('fMarket')?.value||'';
   const na=(els('fName')?.value||'').trim().toLowerCase();
   const list = (typeof ANN!=='undefined'?ANN:[]).filter(a=>{
-    if(co && !(a.company||'').toLowerCase().includes(co)) return false;
-    if(re && a.region!==re) return false;
+    if(co && !matchCompany(a.company, co)) return false;
+    if(re && !regionMatches(re, a.region, a.country)) return false;
     if(ma && (a.country||'')!==ma) return false;
     if(na && !(a.project||'').toLowerCase().includes(na) && !(a.company||'').toLowerCase().includes(na)) return false;
     return true;
@@ -2586,7 +2632,7 @@ function annScoped(){
     if(sc==='eu' && !a.europe) return false;
     if(ph && a.phase!==ph) return false;
     if(cf && a.confidence!==cf) return false;
-    if(co && !((a.company||'').toLowerCase().includes(co))) return false;
+    if(co && !matchCompany(a.company, co)) return false;
     return true;
   });
 }
@@ -3231,7 +3277,7 @@ function mapScoped(){ // filas con los filtros propios del mapa (independientes 
   const st=(els('mapStatus2')?els('mapStatus2').value:'');
   const sz=(els('mapSize')?els('mapSize').value:'');
   return R.filter(r=>{
-    if(co && !(r[C.company]||'').toLowerCase().includes(co)) return false;
+    if(co && !matchCompany(r[C.company], co)) return false;
     if(ct && companyTypeOf(r[C.company])!==ct) return false;
     if(sc && r[C.subcategory]!==sc) return false;
     if(st && r[C.status]!==st) return false;
@@ -3763,7 +3809,7 @@ function renderCompanies(){
     return m;
   });
 
-  if(q) rows=rows.filter(r=>r.co.toLowerCase().includes(q));
+  if(q) rows=rows.filter(r=>matchCompany(r.co, q));
   if(re) rows=rows.filter(r=>r.region===re);
   if(ty){ rows = (ty==='other') ? rows.filter(r=>!r.type) : rows.filter(r=>r.type===ty); }
 

@@ -125,7 +125,6 @@
 
   sec.innerHTML =
     '<div class="panel" style="border-left:4px solid var(--accent);margin-bottom:14px">' +
-      '<h3>Huella cloud multi-operador — solo fuentes primarias del operador</h3>' +
       '<p style="font-size:12.5px;color:var(--dim);line-height:1.6">' +
       '<b>Operadores:</b> ' + esc(CSPS.join(', ')) + '. <b>Construido:</b> ' + esc(K.meta.built) + '.<br>' +
       Object.keys(K.meta.sources || {}).map(function (k) {
