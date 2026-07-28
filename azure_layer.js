@@ -1,5 +1,5 @@
 /* =============================================================================
-   azure_layer.js · HECE DC Intelligence — pestana "Microsoft Azure" (add-on v3)
+   azure_layer.js · HECE DC Intelligence — pestana "08 · Azure detail" (add-on v3)
    -----------------------------------------------------------------------------
    Add-on AUTOCONTENIDO. No modifica el codigo existente del dashboard.
    Dependencias, todas ya presentes en index.html:
@@ -81,7 +81,7 @@
   var nav = document.querySelector('nav'); if (!nav) return;
   var btn = document.createElement('button');
   btn.setAttribute('data-tab', 'azure');
-  btn.textContent = '07 · Microsoft Azure';
+  btn.textContent = '08 · Azure detail';
   nav.appendChild(btn);
 
   var sec = document.createElement('section');
@@ -659,7 +659,7 @@
     var tip = el('azTip'); if (tip) tip.style.display = 'none';
     document.querySelectorAll('section.print-active').forEach(function (e) { e.classList.remove('print-active'); });
     sec.classList.add('print-active');
-    if (typeof window.populatePrintHeader === 'function') window.populatePrintHeader('07 · Microsoft Azure');
+    if (typeof window.populatePrintHeader === 'function') window.populatePrintHeader('08 · Azure detail');
     try {
       if (typeof window.dcSetPrintTitle === 'function' && typeof window.dcStamp === 'function') {
         window.dcSetPrintTitle(window.dcStamp() + '_DC_MicrosoftAzure_' + view);

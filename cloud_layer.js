@@ -1,5 +1,5 @@
 /* =============================================================================
-   cloud_layer.js · HECE DC Intelligence — pestana "08 · Cloud regions"
+   cloud_layer.js · HECE DC Intelligence — pestana "07 · Cloud regions"
    -----------------------------------------------------------------------------
    Huella multi-operador construida SOLO con fuentes primarias de cada operador.
    Add-on autocontenido: no modifica el codigo existente.
@@ -188,8 +188,13 @@
   var nav = document.querySelector('nav'); if (!nav) return;
   var btn = document.createElement('button');
   btn.setAttribute('data-tab', 'cloud');
-  btn.textContent = '08 · Cloud regions';
-  nav.appendChild(btn);
+  btn.textContent = '07 · Cloud regions';
+  /* La pestana de Azure se registra antes que esta porque su <script> va
+     primero, asi que aqui hay que insertarse DELANTE para que el orden visible
+     sea 07 Cloud regions, 08 Azure detail. Si azure.js no esta cargado, cae al
+     final como antes. */
+  var azBtn = nav.querySelector('button[data-tab="azure"]');
+  if (azBtn) nav.insertBefore(btn, azBtn); else nav.appendChild(btn);
   var sec = document.createElement('section');
   sec.id = 'tab-cloud'; sec.style.display = 'none';
   (document.querySelector('main') || document.body).appendChild(sec);
@@ -615,7 +620,7 @@
     var tip = el('clTip'); if (tip) tip.style.display = 'none';
     document.querySelectorAll('section.print-active').forEach(function (e) { e.classList.remove('print-active'); });
     sec.classList.add('print-active');
-    if (typeof window.populatePrintHeader === 'function') window.populatePrintHeader('08 · Cloud regions');
+    if (typeof window.populatePrintHeader === 'function') window.populatePrintHeader('07 · Cloud regions');
     try {
       if (typeof window.dcSetPrintTitle === 'function' && typeof window.dcStamp === 'function') {
         window.dcSetPrintTitle(window.dcStamp() + '_DC_CloudRegions');
