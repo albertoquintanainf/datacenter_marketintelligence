@@ -47,8 +47,8 @@
   var ON = (K.onramps && K.onramps.rows.length) ? K.onramps : null;
   var OI = {}; if (ON) K.onramps.cols.forEach(function (c, i) { OI[c] = i; });
 
-  var CSP_COLOR = { Azure: '#ee6f2c', AWS: '#3a3a3c', Oracle: '#0e7c86', Google: '#c85a12',
-                    Alibaba: '#7c756e', Tencent: '#e39a5c', IBM: '#1e7a3c', Huawei: '#8e5fa8' };
+  var CSP_COLOR = { Oracle: '#c0392b', Azure: '#2b5fa8', AWS: '#ee6f2c', Google: '#1e7a3c',
+                    Alibaba: '#7c756e', Tencent: '#e39a5c', IBM: '#0e7c86', Huawei: '#8e5fa8' };
   var LAND = '#eae4dd', LANDLINE = '#d6cec4', DIM = '#7c756e';
 
   var MKT = {};
@@ -61,7 +61,31 @@
   /* ---------- centroides de pais (para regiones sin ciudad publicada) ----------
      Se calculan aqui, en runtime, desde el GeoJSON que ya carga el dashboard.
      No se persisten: cloud.js nunca contiene una coordenada fabricada. */
-  var ISO = (window.__MAPX && window.__MAPX.match) || {};
+  /* ---------- normalizacion de mercado ---------------------------------------
+     cloud.js nombra dos paises distinto que BNEF y que __MAPX.match. Sin alias,
+     esas regiones ni se situaban en el mapa (no se resolvia el ISO3) ni cruzaban
+     contra BNEF (salian en rojo como "no match", 13 filas). Es correccion de
+     nomenclatura, no un dato nuevo: el pais ya venia en el fichero. */
+  var MKT_ALIAS = { 'UAE': 'United Arab Emirates', 'China': 'Mainland China' };
+
+  /* Mercado asignado a mano para regiones que la fuente dejo sin pais.
+     ATENCION, esto SI es una inferencia, no un dato publicado por el operador:
+     eu-dcc-rating-1/-2 traen market=null y city="Rating"; los codigos de region
+     de Oracle para esas dos son 'dus' y 'dtm' (Dusseldorf y Dortmund), de donde
+     se deduce Ratingen, Alemania. Anadido a peticion expresa. Si aparece el dato
+     real en una captura posterior, esta tabla debe desaparecer. */
+  var MKT_OVERRIDE = { 'eu-dcc-rating-1': 'Germany', 'eu-dcc-rating-2': 'Germany' };
+
+  function mkt(r) {
+    var m = MKT_OVERRIDE[r[I.region_id]] || r[I.market];
+    return m ? (MKT_ALIAS[m] || m) : null;
+  }
+
+  /* __MAPX.match no trae estos tres: son ciudad-estado o micro-estado y el
+     GeoJSON de 179 paises tampoco los incluye. Sin la equivalencia nombre->ISO3
+     no se llega siquiera al centroide de reserva de mas abajo. */
+  var ISO_EXTRA = { 'Bahrain': 'BHR', 'Hong Kong': 'HKG', 'Singapore': 'SGP' };
+  var ISO = Object.assign({}, ISO_EXTRA, (window.__MAPX && window.__MAPX.match) || {});
   var CENTROID = (function () {
     var out = {}, W = window.__WORLD;
     if (!W || !W.features) return out;
@@ -88,6 +112,12 @@
       });
       if (best) out[f.id] = best;
     });
+    /* El GeoJSON de data.js trae 179 paises y se deja fuera varios micro-estados
+       y territorios, entre ellos los tres que aqui hacen falta. Sin esto, una
+       region en Bahrein no se puede situar aunque el pais se conozca. Centroides
+       aproximados del territorio, NO ubicaciones de instalacion. */
+    var FALLBACK = { BHR: [26.03, 50.55], HKG: [22.35, 114.13], SGP: [1.35, 103.82] };
+    Object.keys(FALLBACK).forEach(function (k) { if (!out[k]) out[k] = FALLBACK[k]; });
     return out;
   })();
 
@@ -139,7 +169,7 @@
   /* Devuelve donde y con que precision se pinta una region. */
   function placement(r) {
     if (r[I.lat] != null) return { lat: r[I.lat], lon: r[I.lon], kind: r[I.coord_src] };
-    var iso = ISO[r[I.market]];
+    var iso = ISO[mkt(r)];
     var c = iso && CENTROID[iso];
     if (c) return { lat: c[0], lon: c[1], kind: 'country' };
     return { lat: null, lon: null, kind: 'none' };
@@ -164,8 +194,36 @@
   sec.id = 'tab-cloud'; sec.style.display = 'none';
   (document.querySelector('main') || document.body).appendChild(sec);
 
+  /* Encuadres del mapa. La proyeccion es equirectangular simple, asi que cada
+     vista se ajusta despues a la relacion 2:1 del canvas (fitView) para que los
+     continentes no salgan estirados. */
+  var MAP_VIEWS = {
+    World:            { lon0: -170, lon1: 190, lat0: -58, lat1: 82 },
+    Europe:           { lon0: -12,  lon1: 42,  lat0: 34,  lat1: 71 },
+    'North America':  { lon0: -168, lon1: -52, lat0: 14,  lat1: 72 },
+    'Latin America':  { lon0: -118, lon1: -34, lat0: -56, lat1: 33 },
+    'Asia-Pacific':   { lon0: 60,   lon1: 180, lat0: -48, lat1: 55 },
+    'Middle East':    { lon0: 24,   lon1: 65,  lat0: 12,  lat1: 43 },
+    Africa:           { lon0: -20,  lon1: 54,  lat0: -36, lat1: 38 }
+  };
+  var mapView = 'World';
+
+  /* Expande el lado corto hasta cuadrar con el aspecto del canvas. */
+  function fitView(v, W, H) {
+    var lon0 = v.lon0, lon1 = v.lon1, lat0 = v.lat0, lat1 = v.lat1;
+    var want = W / H, have = (lon1 - lon0) / (lat1 - lat0);
+    if (have < want) {
+      var addLon = ((lat1 - lat0) * want - (lon1 - lon0)) / 2;
+      lon0 -= addLon; lon1 += addLon;
+    } else if (have > want) {
+      var addLat = ((lon1 - lon0) / want - (lat1 - lat0)) / 2;
+      lat0 -= addLat; lat1 += addLat;
+    }
+    return { lon0: lon0, lon1: lon1, lat0: lat0, lat1: lat1 };
+  }
+
   var CSPS = Object.keys(K.meta.counts || {}).sort();
-  var MKTS = Array.from(new Set(R.rows.map(function (r) { return r[I.market]; }).filter(Boolean))).sort();
+  var MKTS = Array.from(new Set(R.rows.map(mkt).filter(Boolean))).sort();
   var nogeo = R.rows.filter(function (r) { return r[I.lat] == null; }).length;
 
   sec.innerHTML =
@@ -182,14 +240,20 @@
       '<div><label>Search</label><input type="text" id="clQ" placeholder="madrid, eu-south, spain…"></div>' +
     '</div>' +
     '<div class="panel" style="margin-bottom:14px">' +
-      '<h3 id="clMapTitle">Cloud regions by operator</h3>' +
+      '<h3 style="display:flex;justify-content:space-between;align-items:center;gap:12px">' +
+        '<span id="clMapTitle">Cloud regions by operator</span>' +
+        '<select id="clMapView" style="font-family:inherit;font-size:12px;padding:3px 6px;' +
+          'border:1px solid var(--line);border-radius:3px">' +
+          Object.keys(MAP_VIEWS).map(function (k) {
+            return '<option value="' + k + '">' + k + '</option>';
+          }).join('') + '</select></h3>' +
       '<canvas id="clCanvas" width="1000" height="500" style="display:block;width:100%;background:#f0ece7;' +
         'border:1px solid var(--line);border-radius:4px"></canvas>' +
       '<div id="clTip" style="display:none;position:fixed;z-index:60;background:#fff;border:1px solid var(--line);' +
         'border-radius:3px;padding:6px 9px;font-size:11.5px;font-family:var(--mono);' +
         'box-shadow:0 2px 8px rgba(20,40,60,.18);pointer-events:none;max-width:280px"></div>' +
-      '<div id="clLegend" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px;' +
-        'font-family:var(--mono);font-size:11px;color:var(--dim)"></div>' +
+      '<div id="clLegend" style="margin-top:12px;padding:10px 12px;border:1px solid var(--line);' +
+        'border-radius:4px;background:#faf8f5;font-size:12.5px;line-height:1.9"></div>' +
       '<p style="font-size:11.5px;color:var(--dim);margin:10px 0 0">Region class is derived from each ' +
         'operator&rsquo;s own metadata: Oracle from its realm (oc1 commercial; oc2, oc3 and oc4 government; ' +
         'oc19 EU Sovereign Cloud; every other realm is an isolated realm, shown as dedicated), Azure from ' +
@@ -223,9 +287,9 @@
     var q = el('clQ').value.trim().toLowerCase();
     return R.rows.filter(function (r) {
       if (c && r[I.csp] !== c) return false;
-      if (m && r[I.market] !== m) return false;
+      if (m && mkt(r) !== m) return false;
       if (cl && regionClass(r) !== cl) return false;
-      if (q && [r[I.csp], r[I.region_id], r[I.display], r[I.city], r[I.market]]
+      if (q && [r[I.csp], r[I.region_id], r[I.display], r[I.city], mkt(r)]
         .join(' ').toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
@@ -236,7 +300,7 @@
     var cv = el('clCanvas'); if (!cv) return;
     var ctx = cv.getContext('2d'); if (!ctx) return;
     var W = cv.width, H = cv.height;
-    var v = { lon0: -170, lon1: 190, lat0: -58, lat1: 82 };
+    var v = fitView(MAP_VIEWS[mapView] || MAP_VIEWS.World, W, H);
     var pj = function (lon, lat) {
       return [(lon - v.lon0) / (v.lon1 - v.lon0) * W, (v.lat1 - lat) / (v.lat1 - v.lat0) * H];
     };
@@ -262,19 +326,19 @@
       });
     }
     pts = [];
-    var rows = rowsOf(), hidden = 0, nCountry = 0;
+    var rows = rowsOf(), hidden = 0, nCountry = 0, offview = 0;
     /* jitter determinista: varias regiones comparten el mismo centroide (de ciudad
        o de pais) y se taparian entre si. Es puramente visual; el dato no cambia. */
     var seen = {};
     rows.forEach(function (r) {
       var pl = placement(r);
       if (pl.lat == null) { hidden++; return; }
-      if (pl.kind === 'country') nCountry++;
       var key = pl.lat.toFixed(2) + ',' + pl.lon.toFixed(2);
       var n = seen[key] = (seen[key] || 0) + 1;
       var ang = (n - 1) * 2.4, rad = (n - 1) ? 8 : 0;
       var p = pj(pl.lon, pl.lat);
       p[0] += Math.cos(ang) * rad; p[1] += Math.sin(ang) * rad;
+      if (p[0] < -12 || p[0] > W + 12 || p[1] < -12 || p[1] > H + 12) { offview++; return; }
       var col = CSP_COLOR[r[I.csp]] || DIM;
 
       var cls = regionClass(r), approx = pl.kind === 'country', d = 5.5;
@@ -293,31 +357,44 @@
       } else {                               /* circulo */
         ctx.arc(p[0], p[1], d, 0, 6.2832);
       }
-      if (approx) {
-        /* hueco y discontinuo: el operador no publica la ciudad, el marcador
-           esta en el centro del pais y no es una ubicacion real */
-        ctx.fillStyle = col + '26'; ctx.fill();
-        ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.setLineDash([3, 2]);
-        ctx.stroke(); ctx.setLineDash([]);
-      } else {
-        ctx.fillStyle = col; ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3; ctx.stroke();
-      }
+      /* Todos los marcadores se pintan igual: la forma codifica la clase y el
+         color el operador. La distincion visual por precision de coordenada se
+         retiro a peticion del usuario; el aviso sigue en el tooltip. */
+      ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3; ctx.stroke();
+      if (approx) nCountry++;
       pts.push({ x: p[0], y: p[1], r: 9,
         t: r[I.csp] + ' · ' + r[I.region_id] + '\n' + (r[I.display] || '') +
-           '\n' + (r[I.city] || 'city not published') + ' · ' + (r[I.market] || '—') +
+           '\n' + (r[I.city] || 'city not published') + ' · ' + (mkt(r) || '—') +
            '\n' + CLASS_LABEL[cls] + (approx ? '\napproximate position' : '') });
     });
-    el('clLegend').innerHTML = CSPS.map(function (c) {
-      return '<span><b style="color:' + (CSP_COLOR[c] || DIM) + '">●</b> ' + esc(c) + '</span>';
-    }).join('') +
-      '<span style="margin-left:8px;border-left:1px solid var(--line);padding-left:12px">' +
-      '<b>●</b> commercial · <b>■</b> government · <b>▲</b> sovereign · <b>◆</b> dedicated</span>' +
-      '<span>hollow outline = approximate position, city not published (<b>' + nCountry + '</b>)</span>' +
-      (hidden ? '<span style="color:var(--red)"><b>' + hidden +
-        ' with no identifiable country, NOT plotted</b></span>' : '');
-    el('clMapTitle').textContent = 'Cloud regions by operator · ' + (rows.length - hidden) +
-      ' of ' + rows.length + ' on the map' + (hidden ? ' · ' + hidden + ' not locatable' : '');
+    var lgRow = function (label, items) {
+      return '<div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">' +
+        '<span style="min-width:74px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;' +
+          'color:var(--dim)">' + label + '</span>' + items + '</div>';
+    };
+    var byCsp = {};
+    rows.forEach(function (r) { byCsp[r[I.csp]] = (byCsp[r[I.csp]] || 0) + 1; });
+    el('clLegend').innerHTML =
+      lgRow('Operator', CSPS.map(function (c) {
+        return '<span><b style="color:' + (CSP_COLOR[c] || DIM) + ';font-size:17px;' +
+          'vertical-align:-2px">●</b> <b>' + esc(c) + '</b> ' +
+          '<span style="color:var(--dim)">' + (byCsp[c] || 0) + '</span></span>';
+      }).join('')) +
+      lgRow('Class', '<span><b style="font-size:16px">●</b> Commercial</span>' +
+        '<span><b style="font-size:15px">■</b> Government</span>' +
+        '<span><b style="font-size:15px">▲</b> Sovereign</span>' +
+        '<span><b style="font-size:15px">◆</b> Dedicated</span>') +
+      ((offview || hidden || nCountry) ? lgRow('Notes',
+        (nCountry ? '<span style="color:var(--dim)">' + nCountry +
+          ' placed at country centre, city not published — hover for detail</span>' : '') +
+        (offview ? '<span style="color:var(--dim)">' + offview + ' outside this view</span>' : '') +
+        (hidden ? '<span style="color:var(--red)"><b>' + hidden +
+          ' with no identifiable country, not plotted</b></span>' : '')) : '');
+    el('clMapTitle').textContent = 'Cloud regions by operator · ' +
+      (rows.length - hidden - offview) + ' of ' + rows.length + ' on the map' +
+      (offview ? ' · ' + offview + ' outside this view' : '') +
+      (hidden ? ' · ' + hidden + ' not locatable' : '');
   }
 
   (function () {
@@ -360,7 +437,7 @@
       return byC[k].commercial + byC[k].government + byC[k].sovereign + byC[k].dedicated;
     };
     var ks = Object.keys(byC).sort(function (a, b) { return tot(b) - tot(a); });
-    var CLASS_FILL = { commercial: '#cfc7bd', government: '#c0392b',
+    var CLASS_FILL = { commercial: '#cfc7bd', government: '#6b4c9a',
                        sovereign: '#c85a12', dedicated: '#0e7c86' };
     mkChart('clC1', {
       type: 'bar',
@@ -375,7 +452,7 @@
 
     var byM = {};
     rows.forEach(function (r) {
-      var m = r[I.market]; if (!m) return;
+      var m = mkt(r); if (!m) return;
       (byM[m] = byM[m] || { n: 0, csps: {} }).n++;
       byM[m].csps[r[I.csp]] = 1;
     });
@@ -413,8 +490,8 @@
         '<td>' + esc(r[I.display] || '—') + '</td>' +
         '<td>' + (r[I.city] ? esc(r[I.city])
           : '<span style="color:var(--dim)">not published</span>') + '</td>' +
-        '<td>' + (r[I.market] ? (MKT[r[I.market]] ? esc(r[I.market])
-          : '<span style="color:var(--red)">' + esc(r[I.market]) + '</span>') : '—') + '</td>' +
+        '<td>' + (mkt(r) ? (MKT[mkt(r)] ? esc(mkt(r))
+          : '<span style="color:var(--red)">' + esc(mkt(r)) + '</span>') : '—') + '</td>' +
         '<td>' + esc(r[I.geo_area] || '—') + '</td>' +
         '<td>' + (r[I.status] === 'announced'
           ? '<span class="tag" style="color:#c85a12;border-color:#ecd9ae">announced</span>'
@@ -422,7 +499,7 @@
         '<td>' + esc(r[I.year_open] || '—') + '</td>' +
         '<td style="font-size:11px">' + (function () {
           var k = regionClass(r);
-          var col = k === 'government' ? '#c0392b' : k === 'sovereign' ? '#c85a12'
+          var col = k === 'government' ? '#6b4c9a' : k === 'sovereign' ? '#c85a12'
                   : k === 'dedicated' ? '#0e7c86' : 'var(--dim)';
           return '<span style="color:' + col + '">' + CLASS_LABEL[k] + '</span>';
         })() + '</td>' +
@@ -448,7 +525,7 @@
   function renderCross() {
     var by = {};
     R.rows.forEach(function (r) {
-      var m = r[I.market]; if (!m) return;
+      var m = mkt(r); if (!m) return;
       var o = by[m] || (by[m] = { m: m, csps: {}, n: 0 });
       o.n++; o.csps[r[I.csp]] = (o.csps[r[I.csp]] || 0) + 1;
     });
@@ -486,7 +563,7 @@
     el('clKpis').innerHTML = [
       [rows.length, 'Cloud regions'],
       [new Set(rows.map(function (r) { return r[I.csp]; })).size, 'Operators'],
-      [new Set(rows.map(function (r) { return r[I.market]; }).filter(Boolean)).size, 'Markets'],
+      [new Set(rows.map(mkt).filter(Boolean)).size, 'Markets'],
       [rows.filter(function (r) { return regionClass(r) === 'government'; }).length, 'Government'],
       [rows.filter(function (r) { return regionClass(r) === 'sovereign'; }).length, 'Sovereign'],
       [rows.filter(function (r) { return regionClass(r) === 'dedicated'; }).length, 'Dedicated']
@@ -498,6 +575,7 @@
 
   ['clCsp', 'clMkt', 'clClass'].forEach(function (id) { el(id).addEventListener('change', render); });
   el('clQ').addEventListener('input', render);
+  el('clMapView').addEventListener('change', function () { mapView = this.value; drawMap(); });
 
   el('clCsv').addEventListener('click', function () {
     var lines = [R.cols.join(';')];
