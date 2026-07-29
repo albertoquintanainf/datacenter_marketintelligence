@@ -447,7 +447,25 @@ a.rl{color:var(--accent);font-size:12px;margin-right:14px}
 
 <!-- ================= TAB 1: SEARCH ================= -->
 <section id="tab-search" style="display:none">
-  <div class="tab-actions"><button class="btn primary" id="addDCBtn" disabled onclick="openAddDCModal()">+ Add data center</button><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button></div>
+  <div class="tab-actions"><button class="btn primary" id="addDCBtn" disabled onclick="openAddDCModal()">+ Add data center</button><button class="btn" onclick="printCurrentTab()">🖨 Print this tab / save as PDF</button>
+    <span style="display:inline-flex;align-items:center;gap:6px;margin-left:auto">
+      <select id="choMetric" style="font-family:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:3px">
+        <option value="live">Live MW</option>
+        <option value="uc">Under construction MW</option>
+        <option value="pipe">BNEF Pipeline MW</option>
+        <option value="fut">Future MW (UC + Pipeline)</option>
+        <option value="headline">Headline MW</option>
+        <option value="n">Number of facilities</option>
+      </select>
+      <select id="choView" style="font-family:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:3px">
+        <option value="world">World</option>
+        <option value="EMEA">EMEA</option>
+        <option value="Europe">Europe</option>
+        <option value="AMER">AMER</option>
+        <option value="APAC">APAC</option>
+      </select>
+      <button class="btn" onclick="exportChoropleth()">🗺 Export choropleth (PNG)</button>
+    </span></div>
   <div class="filters">
     <div><label>Company</label><input type="text" id="fCompany" list="companyList" placeholder="All — type to search"><datalist id="companyList"></datalist></div>
     <div><label>Continent / Region</label><select id="fRegion"><option value="">All</option></select></div>
@@ -965,6 +983,142 @@ function applyFilters(){
   if(els('tab-map') && els('tab-map').style.display!=='none') renderMap();
 }
 ['fCompany','fRegion','fMarket','fSize','fSubcat','fStatus','fName'].forEach(id=>els(id).addEventListener('input',applyFilters));
+
+/* ============================================================================
+   EXPORTACION DE MAPA CLOROPLETICO (pestana 02)
+   Agrega SOBRE `filtered`, o sea sobre los filtros activos de la base de datos.
+   Ojo: es deliberadamente independiente de mapAgg()/mapScoped() de la pestana
+   05, que tiene sus propios filtros. Si algun dia se unifican, hay que revisar
+   las dos, no solo una. ========================================================= */
+function choFilterSummary(){
+  const L=[];
+  const g=(id,label)=>{ const e=els(id); if(e&&e.value&&e.value.trim()) L.push(label+': '+e.value.trim()); };
+  g('fCompany','Company'); g('fRegion','Region'); g('fMarket','Country');
+  g('fSubcat','Facility type'); g('fStatus','Status'); g('fName','Name');
+  const sz=els('fSize');
+  if(sz&&sz.value) L.push('Size: '+sz.options[sz.selectedIndex].text);
+  return L.length?L.join('  ·  '):'No filters applied — all records';
+}
+
+function choAgg(){
+  const m={}; let unmatched=0, unmatchedMk={};
+  filtered.forEach(r=>{
+    const mk=r[C.market], iso=mk?MAPX.match[mk]:null;
+    if(!iso){ unmatched++; if(mk) unmatchedMk[mk]=1; return; }
+    const o=m[iso]||(m[iso]={market:mk,region:r[C.region],n:0,live:0,uc:0,pipe:0,headline:0});
+    o.n++; o.live+=r[C.live]||0; o.uc+=r[C.uc]||0;
+    o.pipe+=r[C.pipeline]||0; o.headline+=r[C.headline]||0;
+  });
+  Object.keys(m).forEach(k=>{ m[k].fut=m[k].uc+m[k].pipe; });
+  return {agg:m, unmatched:unmatched, unmatchedMk:Object.keys(unmatchedMk)};
+}
+
+function exportChoropleth(){
+  const metric=els('choMetric').value, viewKey=els('choView').value;
+  const mlabel={live:'Live MW',uc:'Under construction MW',pipe:'BNEF Pipeline MW',
+                fut:'Future MW (UC + BNEF Pipeline)',headline:'Headline MW',
+                n:'Number of facilities'}[metric];
+  const R2=choAgg(), agg=R2.agg;
+
+  const inView=iso=>{
+    if(viewKey==='world') return true;
+    if(viewKey==='Europe') return EUROPE_ISO.has(iso);
+    const a=agg[iso]; return !!(a && a.region===viewKey);
+  };
+
+  const vals=[]; for(const iso in agg){ if(inView(iso)) vals.push(agg[iso][metric]); }
+  if(!vals.length){ alert('No mappable records for the current filters.'); return; }
+  const breaks=quantileBreaks(vals,MAP_COLORS.length);
+
+  /* lienzo a 2x para que el PNG no salga borroso al ampliarlo */
+  const v=MAP_VIEWS[viewKey]||MAP_VIEWS.world;
+  const S=2, W=1000*S, MH=Math.round(W*(v.lat1-v.lat0)/(v.lon1-v.lon0));
+  const HEAD=104*S, FOOT=132*S, H=HEAD+MH+FOOT;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  if(!ctx){ alert('Canvas not available in this browser.'); return; }
+  const F=n2=>Math.round(n2*S);
+
+  ctx.fillStyle='#fffdfa'; ctx.fillRect(0,0,W,H);
+
+  /* cabecera */
+  ctx.fillStyle='#1a1714'; ctx.textBaseline='top';
+  ctx.font='600 '+F(21)+'px system-ui,-apple-system,Segoe UI,sans-serif';
+  ctx.fillText(mlabel+' by country',F(22),F(20));
+  ctx.fillStyle='#7c756e'; ctx.font=F(13)+'px system-ui,-apple-system,Segoe UI,sans-serif';
+  ctx.fillText(choFilterSummary(),F(22),F(52));
+  const nMapped=filtered.length-R2.unmatched;
+  ctx.fillText(nMapped+' of '+filtered.length+' filtered records mapped  ·  '+viewKey+' view  ·  '+
+    new Date().toISOString().slice(0,10),F(22),F(74));
+
+  /* mapa */
+  const spanLon=(v.lon1-v.lon0)||1, spanLat=(v.lat1-v.lat0)||1;
+  const px=lon=>(lon-v.lon0)/spanLon*W, py=lat=>HEAD+(v.lat1-lat)/spanLat*MH;
+  ctx.fillStyle='#f0ece7'; ctx.fillRect(0,HEAD,W,MH);
+  ctx.lineWidth=Math.max(1,0.6*S); ctx.strokeStyle='#cfc7bd';
+  for(let i=0;i<WORLD.features.length;i++){
+    const f=WORLD.features[i], o=agg[f.id], geom=f.geometry;
+    if(!geom) continue;
+    const show=(viewKey==='world')?true:inView(f.id);
+    ctx.fillStyle=(o&&show)?colorFor(o[metric],breaks):'#e8e2db';
+    const polys=geom.type==='Polygon'?[geom.coordinates]:(geom.type==='MultiPolygon'?geom.coordinates:[]);
+    for(let p=0;p<polys.length;p++){
+      const poly=polys[p];
+      ctx.beginPath();
+      for(let r=0;r<poly.length;r++){
+        const ring=poly[r]; if(!ring||!ring.length) continue;
+        for(let k=0;k<ring.length;k++){
+          const x=px(ring[k][0]), y=py(ring[k][1]);
+          if(k===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        ctx.closePath();
+      }
+      ctx.fill(); ctx.stroke();
+    }
+  }
+
+  /* leyenda */
+  let y=HEAD+MH+F(18);
+  ctx.fillStyle='#1a1714'; ctx.font='600 '+F(12)+'px system-ui,-apple-system,Segoe UI,sans-serif';
+  ctx.fillText(mlabel+' — quantile scale',F(22),y);
+  y+=F(20);
+  const sw=F(62), sh=F(15); let x=F(22);
+  for(let i=0;i<MAP_COLORS.length;i++){
+    ctx.fillStyle=MAP_COLORS[i]; ctx.fillRect(x,y,sw,sh);
+    ctx.strokeStyle='#cfc7bd'; ctx.lineWidth=1; ctx.strokeRect(x,y,sw,sh);
+    const lo=i===0?0:breaks[i-1];
+    ctx.fillStyle='#7c756e'; ctx.font=F(10)+'px system-ui,-apple-system,Segoe UI,sans-serif';
+    ctx.fillText('≥ '+fmt(Math.round(lo||0),0),x,y+sh+F(4));
+    x+=sw+F(6);
+  }
+  ctx.fillStyle='#7c756e'; ctx.font=F(10)+'px system-ui,-apple-system,Segoe UI,sans-serif';
+  ctx.fillText('grey = no '+mlabel.toLowerCase()+' under the current filters',x+F(10),y+F(3));
+
+  /* pie: la parte honesta, lo que el mapa NO dice */
+  y+=sh+F(26);
+  ctx.fillStyle='#7c756e'; ctx.font=F(11)+'px system-ui,-apple-system,Segoe UI,sans-serif';
+  ctx.fillText('Source: BNEF / DCByte facility database. Country totals aggregate the filtered '+
+    'records only; they are not whole-market totals unless no filters are applied.',F(22),y);
+  y+=F(16);
+  if(R2.unmatched){
+    ctx.fillStyle='#c0392b';
+    let msg=R2.unmatched+' filtered record(s) could not be placed on the map';
+    if(R2.unmatchedMk.length) msg+=' — unmatched country name(s): '+R2.unmatchedMk.slice(0,6).join(', ')+
+      (R2.unmatchedMk.length>6?', …':'');
+    ctx.fillText(msg,F(22),y);
+  } else {
+    ctx.fillText('All filtered records were placed on the map.',F(22),y);
+  }
+
+  /* descarga */
+  const name='DC_choropleth_'+metric+'_'+viewKey+'_'+new Date().toISOString().slice(0,10)+'.png';
+  cv.toBlob(function(b){
+    if(!b){ alert('Could not generate the image.'); return; }
+    const u=URL.createObjectURL(b), a=document.createElement('a');
+    a.href=u; a.download=name; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(u),1000);
+  },'image/png');
+}
 
 function sortData(){
   const k=C[sortCol];
@@ -3887,9 +4041,9 @@ document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()
 renderTable(); renderSearchKpis(); renderCompanies();
 </script>
 <!-- ===== Capa Azure regions (add-on, no modifica el codigo anterior) ===== -->
-<script src="azure.js" onerror="console.info('[azure_layer] azure.js no encontrado - capa Azure desactivada')"></script>
+<script src="azure.js" onerror="console.info('[azure_layer] azure.js not found - Azure layer disabled')"></script>
 <script src="azure_layer.js"></script>
-<script src="cloud.js" onerror="console.info('[cloud_layer] cloud.js no encontrado - pestana Cloud desactivada')"></script>
+<script src="cloud.js" onerror="console.info('[cloud_layer] cloud.js not found - Cloud regions tab disabled')"></script>
 <script src="cloud_layer.js"></script>
-<script>if(typeof window.__DATA==='undefined'){document.addEventListener('DOMContentLoaded',function(){document.body.innerHTML='<div style="font-family:sans-serif;padding:40px"><h2>No se cargaron los datos</h2><p>Falta <b>data.js</b>.</p></div>';});}</script></body>
+<script>if(typeof window.__DATA==='undefined'){document.addEventListener('DOMContentLoaded',function(){document.body.innerHTML='<div style="font-family:sans-serif;padding:40px"><h2>Data failed to load</h2><p><b>data.js</b> is missing.</p></div>';});}</script></body>
 </html>
